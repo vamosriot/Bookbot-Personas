@@ -22,6 +22,8 @@ A modern AI chatbot application featuring 5 distinct AI personas, built with Rea
 
 Visit the live application: [https://vamosriot.github.io/Bookbot-Personas/](https://vamosriot.github.io/Bookbot-Personas/)
 
+> **Note**: If you see a 404 error, the deployment may still be in progress. Check the [Actions tab](https://github.com/vamosriot/Bookbot-Personas/actions) for deployment status.
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 18, TypeScript, Vite
