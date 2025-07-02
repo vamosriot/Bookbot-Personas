@@ -12,13 +12,16 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Get the base path for React Router - works in both dev and production
+const basename = process.env.NODE_ENV === 'production' ? '/Bookbot-Personas/' : '/';
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={basename}>
           <Routes>
             <Route 
               path="/" 
