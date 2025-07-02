@@ -1,82 +1,76 @@
-
-
-import { useState } from "react";
-import { Send, Menu, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Send, Menu, ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-
-interface Message {
-  id: string;
-  content: string;
-  isUser: boolean;
-  timestamp: string;
-}
+import { useChat } from "@/contexts/ChatContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { personas } from "@/config/personas";
+import { MessageWithFiles } from "./MessageWithFiles";
 
 interface ChatAreaProps {
   conversationId: string | null;
   onToggleSidebar: () => void;
 }
 
-const models = [
-  { id: "pepa", name: "Pepa", description: "Creative and expressive" },
-  { id: "jarka", name: "Jarka", description: "Analytical and precise" },
-  { id: "honza", name: "Honza", description: "Technical specialist" },
-  { id: "alena", name: "Alena", description: "Friendly and helpful" },
-  { id: "sofie", name: "Sofie", description: "Academic and thorough" },
-];
-
-const mockMessages: Message[] = [
-  {
-    id: "1",
-    content: "Hello! How can I help you today?",
-    isUser: false,
-    timestamp: "10:30 AM",
-  },
-  {
-    id: "2",
-    content: "I need help with creating a React component for a chat interface. Can you guide me through the process?",
-    isUser: true,
-    timestamp: "10:31 AM",
-  },
-  {
-    id: "3",
-    content: "I'd be happy to help you create a React chat interface component! Let's break this down into steps:\n\n1. **Component Structure**: We'll need components for the chat container, message list, individual messages, and input area.\n\n2. **State Management**: We'll use React hooks to manage messages, input state, and user interactions.\n\n3. **Styling**: We'll use modern CSS or a UI library for a clean, responsive design.\n\nWould you like me to start with a basic example, or do you have specific requirements for your chat interface?",
-    isUser: false,
-    timestamp: "10:32 AM",
-  },
-];
-
 export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const { user } = useAuth();
+  const { 
+    messages, 
+    selectedPersona, 
+    currentConversation, 
+    setSelectedPersona, 
+    createNewConversation, 
+    addMessage,
+    isLoading,
+    error 
+  } = useChat();
+  
   const [inputValue, setInputValue] = useState("");
-  const [selectedModel, setSelectedModel] = useState(models[0]);
+  const [isSending, setIsSending] = useState(false);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
+  }, [messages]);
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      content: inputValue,
-      isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || !currentConversation || isSending) return;
 
-    setMessages([...messages, newMessage]);
+    const messageContent = inputValue.trim();
     setInputValue("");
+    setIsSending(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "Thank you for your message! I'm here to help you with any questions or tasks you have.",
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
+    try {
+      // Add user message
+      await addMessage({
+        conversation_id: currentConversation.id,
+        content: messageContent,
+        role: 'user',
+        persona_id: selectedPersona.id
+      });
+
+      // TODO: Add AI response here when Cloudflare Worker is set up
+      // For now, we'll add a placeholder response
+      setTimeout(async () => {
+        await addMessage({
+          conversation_id: currentConversation.id,
+          content: `Hello! I'm ${selectedPersona.displayName}. ${selectedPersona.description}. I'd be happy to help you! (Note: AI responses will work once the OpenAI integration is set up.)`,
+          role: 'assistant',
+          persona_id: selectedPersona.id
+        });
+        setIsSending(false);
+      }, 1000);
+
+    } catch (err) {
+      console.error('Error sending message:', err);
+      setIsSending(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -85,6 +79,58 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
       handleSendMessage();
     }
   };
+
+  const handlePersonaChange = async (persona: typeof personas[0]) => {
+    setSelectedPersona(persona);
+    
+    // Create new conversation with the selected persona
+    if (user) {
+      await createNewConversation(persona.id);
+    }
+  };
+
+  // Show empty state if no conversation is selected
+  if (!currentConversation) {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-background">
+        <div className="border-b border-border p-4 flex items-center justify-between bg-background">
+          <div className="flex items-center space-x-3">
+            <Button variant="ghost" size="icon" onClick={onToggleSidebar} className="md:hidden hover:bg-accent">
+              <Menu className="h-5 w-5" />
+            </Button>
+            <span className="font-medium text-foreground">Select a conversation or create a new one</span>
+          </div>
+        </div>
+        
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <h3 className="text-lg font-medium text-foreground">No conversation selected</h3>
+            <p className="text-muted-foreground">Choose a persona to start chatting</p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-primary hover:bg-primary/90">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Start New Conversation
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-64 bg-popover border-border shadow-md z-50">
+                {personas.map((persona) => (
+                  <DropdownMenuItem
+                    key={persona.id}
+                    onClick={() => handlePersonaChange(persona)}
+                    className="flex flex-col items-start p-3 hover:bg-accent cursor-pointer focus:bg-accent"
+                  >
+                    <span className="font-medium text-foreground">{persona.displayName}</span>
+                    <span className="text-sm text-muted-foreground">{persona.description}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
@@ -98,20 +144,32 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="bg-background hover:bg-accent border-border shadow-sm">
                 <div className="flex items-center space-x-2">
-                  <span className="font-medium text-foreground">{selectedModel.name}</span>
+                  <Avatar className="w-6 h-6">
+                    <AvatarFallback style={{ backgroundColor: selectedPersona.color }} className="text-white text-xs">
+                      {selectedPersona.displayName.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="font-medium text-foreground">{selectedPersona.displayName}</span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64 bg-popover border-border shadow-md z-50">
-              {models.map((model) => (
+              {personas.map((persona) => (
                 <DropdownMenuItem
-                  key={model.id}
-                  onClick={() => setSelectedModel(model)}
-                  className="flex flex-col items-start p-3 hover:bg-accent cursor-pointer focus:bg-accent"
+                  key={persona.id}
+                  onClick={() => handlePersonaChange(persona)}
+                  className="flex items-center space-x-3 p-3 hover:bg-accent cursor-pointer focus:bg-accent"
                 >
-                  <span className="font-medium text-foreground">{model.name}</span>
-                  <span className="text-sm text-muted-foreground">{model.description}</span>
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback style={{ backgroundColor: persona.color }} className="text-white text-sm">
+                      {persona.displayName.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium text-foreground">{persona.displayName}</span>
+                    <span className="text-sm text-muted-foreground">{persona.description}</span>
+                  </div>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -120,38 +178,52 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-6 max-w-4xl mx-auto">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex items-start space-x-3 ${
-                message.isUser ? "flex-row-reverse space-x-reverse" : ""
-              }`}
-            >
-              <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarFallback className={message.isUser ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}>
-                  {message.isUser ? "U" : "AI"}
+          {messages.length === 0 ? (
+            <div className="text-center py-8">
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                Start a conversation with {selectedPersona.displayName}
+              </h3>
+              <p className="text-muted-foreground">{selectedPersona.description}</p>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <MessageWithFiles 
+                key={message.id} 
+                message={message} 
+                isOwn={message.role === 'user'}
+                showTimestamp={true}
+              />
+            ))
+          )}
+          {isSending && (
+            <div className="flex items-start space-x-3">
+              <Avatar className="w-8 h-8">
+                <AvatarFallback style={{ backgroundColor: selectedPersona.color }} className="text-white">
+                  {selectedPersona.displayName.charAt(0)}
                 </AvatarFallback>
               </Avatar>
-              <div className={`flex-1 ${message.isUser ? "text-right" : ""}`}>
-                <div
-                  className={`inline-block p-4 rounded-2xl max-w-[80%] shadow-sm ${
-                    message.isUser
-                      ? "bg-primary text-primary-foreground ml-auto"
-                      : "bg-muted text-foreground"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+              <div className="flex-1">
+                <div className="inline-block p-4 rounded-2xl bg-muted text-foreground">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2 px-2">
-                  {message.timestamp}
-                </p>
               </div>
             </div>
-          ))}
+          )}
         </div>
       </ScrollArea>
+
+      {/* Error Display */}
+      {error && (
+        <div className="px-4 py-2 bg-destructive/10 border-t border-destructive/20">
+          <p className="text-sm text-destructive text-center">{error}</p>
+        </div>
+      )}
 
       {/* Input Area */}
       <div className="border-t border-border p-4 bg-background">
@@ -161,13 +233,14 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Type your message here..."
+              placeholder={`Type your message to ${selectedPersona.displayName}...`}
               className="min-h-[60px] pr-12 resize-none bg-background border-input focus:border-primary focus:ring-primary shadow-sm"
               rows={2}
+              disabled={isSending || isLoading}
             />
             <Button
               onClick={handleSendMessage}
-              disabled={!inputValue.trim()}
+              disabled={!inputValue.trim() || isSending || isLoading}
               size="icon"
               className="absolute right-2 bottom-2 h-8 w-8 bg-primary hover:bg-primary/90 shadow-sm"
             >
