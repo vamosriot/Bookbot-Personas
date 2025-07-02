@@ -6,6 +6,9 @@ export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 export const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 export const CLOUDFLARE_WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL || '';
 
+// GitHub Pages Configuration
+export const BASE_URL = import.meta.env.BASE_URL || '/';
+
 // OpenAI Configuration
 export const OPENAI_MODEL = 'gpt-4-turbo-preview';
 export const OPENAI_MAX_TOKENS = 4096;
@@ -49,8 +52,8 @@ export const REALTIME_CHANNELS = {
 
 // Authentication Configuration
 export const AUTH_SETTINGS = {
-  SIGN_IN_REDIRECT_URL: '/',
-  SIGN_OUT_REDIRECT_URL: '/login'
+  SIGN_IN_REDIRECT_URL: BASE_URL,
+  SIGN_OUT_REDIRECT_URL: `${BASE_URL}login`
 } as const;
 
 // UI Configuration
@@ -110,9 +113,6 @@ export const STORAGE_KEYS = {
 // Development Configuration
 export const IS_DEVELOPMENT = import.meta.env.DEV;
 export const IS_PRODUCTION = import.meta.env.PROD;
-
-// GitHub Pages Configuration
-export const BASE_URL = import.meta.env.BASE_URL || '/';
 
 // Environment Variables Validation
 export const validateEnvironmentVariables = () => {
