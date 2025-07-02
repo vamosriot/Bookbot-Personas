@@ -87,7 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       setError(null);
       
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
@@ -96,43 +96,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setError(error.message || ERROR_MESSAGES.AUTH_ERROR);
         throw error;
       }
-
-      return data;
     } catch (err: any) {
       console.error('Sign in error:', err);
-      setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const signUp = async (email: string, password: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}${AUTH_SETTINGS.SIGN_IN_REDIRECT_URL}`
-        }
-      });
-
-      if (error) {
-        setError(error.message || ERROR_MESSAGES.AUTH_ERROR);
-        throw error;
-      }
-
-      // If email confirmation is required, show message
-      if (AUTH_SETTINGS.EMAIL_CONFIRMATION_REQUIRED && !session) {
-        setError(null); // Clear any error as this is expected
-      }
-
-      return data;
-    } catch (err: any) {
-      console.error('Sign up error:', err);
       setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
       throw err;
     } finally {
@@ -159,37 +124,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const resetPassword = async (email: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`
-      });
-
-      if (error) {
-        setError(error.message || ERROR_MESSAGES.AUTH_ERROR);
-        throw error;
-      }
-    } catch (err: any) {
-      console.error('Password reset error:', err);
-      setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const value: AuthContextType = {
     user,
     session,
     isLoading,
     error,
     signIn,
-    signUp,
-    signOut,
-    resetPassword
+    signOut
   };
 
   return (

@@ -50,9 +50,7 @@ export const REALTIME_CHANNELS = {
 // Authentication Configuration
 export const AUTH_SETTINGS = {
   SIGN_IN_REDIRECT_URL: '/',
-  SIGN_OUT_REDIRECT_URL: '/login',
-  EMAIL_CONFIRMATION_REQUIRED: true,
-  PASSWORD_MIN_LENGTH: 8
+  SIGN_OUT_REDIRECT_URL: '/login'
 } as const;
 
 // UI Configuration
@@ -82,8 +80,7 @@ export const SUCCESS_MESSAGES = {
   FILE_UPLOADED: 'File uploaded successfully',
   MESSAGE_SENT: 'Message sent',
   SIGNED_IN: 'Successfully signed in',
-  SIGNED_OUT: 'Successfully signed out',
-  PASSWORD_RESET_SENT: 'Password reset email sent'
+  SIGNED_OUT: 'Successfully signed out'
 } as const;
 
 // Loading States
