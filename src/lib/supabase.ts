@@ -2,15 +2,30 @@ import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/types';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, validateEnvironmentVariables } from '@/config/constants';
 
-// Validate environment variables before creating client
-try {
-  validateEnvironmentVariables();
-} catch (error) {
-  console.error('Supabase configuration error:', error);
+// Check if Supabase credentials are available
+const hasSupabaseCredentials = SUPABASE_URL && SUPABASE_ANON_KEY;
+
+// Log environment state for debugging
+console.log('Supabase Environment Check:', {
+  hasURL: !!SUPABASE_URL,
+  hasKey: !!SUPABASE_ANON_KEY,
+  urlPrefix: SUPABASE_URL ? SUPABASE_URL.substring(0, 20) + '...' : 'missing',
+  environment: process.env.NODE_ENV || 'unknown'
+});
+
+// Validate environment variables only if we have them
+if (hasSupabaseCredentials) {
+  try {
+    validateEnvironmentVariables();
+  } catch (error) {
+    console.error('Supabase configuration error:', error);
+  }
+} else {
+  console.warn('Supabase credentials missing - app will run in demo mode');
 }
 
 // Create Supabase client with proper TypeScript types
-export const supabase = createClient<Database>(
+export const supabase = hasSupabaseCredentials ? createClient<Database>(
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
   {
@@ -31,10 +46,15 @@ export const supabase = createClient<Database>(
       }
     }
   }
-);
+) : null;
 
 // Helper function to get the current user
 export const getCurrentUser = async () => {
+  if (!supabase) {
+    console.warn('Supabase not initialized - returning null user');
+    return null;
+  }
+  
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error) {
     console.error('Error getting current user:', error);
@@ -45,6 +65,11 @@ export const getCurrentUser = async () => {
 
 // Helper function to get the current session
 export const getCurrentSession = async () => {
+  if (!supabase) {
+    console.warn('Supabase not initialized - returning null session');
+    return null;
+  }
+  
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error) {
     console.error('Error getting current session:', error);
@@ -74,6 +99,10 @@ export const getAuthHeaders = async () => {
 
 // Storage helpers
 export const uploadFile = async (file: File, path: string) => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+  
   const { data, error } = await supabase.storage
     .from('file-attachments')
     .upload(path, file, {
@@ -89,6 +118,10 @@ export const uploadFile = async (file: File, path: string) => {
 };
 
 export const getFileUrl = (path: string) => {
+  if (!supabase) {
+    return '';
+  }
+  
   const { data } = supabase.storage
     .from('file-attachments')
     .getPublicUrl(path);
@@ -97,6 +130,10 @@ export const getFileUrl = (path: string) => {
 };
 
 export const deleteFile = async (path: string) => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+  
   const { error } = await supabase.storage
     .from('file-attachments')
     .remove([path]);
@@ -108,6 +145,10 @@ export const deleteFile = async (path: string) => {
 
 // Database helpers
 export const createConversation = async (userId: string, personaId: string, title: string) => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+  
   const { data, error } = await supabase
     .from('conversations')
     .insert({
@@ -128,6 +169,10 @@ export const createConversation = async (userId: string, personaId: string, titl
 };
 
 export const getConversations = async (userId: string) => {
+  if (!supabase) {
+    return [];
+  }
+  
   const { data, error } = await supabase
     .from('conversations')
     .select('*')
@@ -142,6 +187,10 @@ export const getConversations = async (userId: string) => {
 };
 
 export const getMessages = async (conversationId: string) => {
+  if (!supabase) {
+    return [];
+  }
+  
   const { data, error } = await supabase
     .from('messages')
     .select(`
@@ -164,6 +213,10 @@ export const createMessage = async (message: {
   role: 'user' | 'assistant';
   persona_id?: string;
 }) => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+  
   const { data, error } = await supabase
     .from('messages')
     .insert(message)
@@ -179,6 +232,11 @@ export const createMessage = async (message: {
 
 // Real-time subscriptions
 export const subscribeToConversations = (userId: string, callback: (payload: any) => void) => {
+  if (!supabase) {
+    console.warn('Supabase not initialized - skipping subscription');
+    return { unsubscribe: () => {} };
+  }
+  
   return supabase
     .channel('conversations')
     .on(
@@ -195,6 +253,11 @@ export const subscribeToConversations = (userId: string, callback: (payload: any
 };
 
 export const subscribeToMessages = (conversationId: string, callback: (payload: any) => void) => {
+  if (!supabase) {
+    console.warn('Supabase not initialized - skipping subscription');
+    return { unsubscribe: () => {} };
+  }
+  
   return supabase
     .channel('messages')
     .on(

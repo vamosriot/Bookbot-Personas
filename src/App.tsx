@@ -2,18 +2,33 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { LoginPage } from "@/components/auth/LoginPage";
 import Index from "./pages/index";
 import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
 // Get the base path for React Router - works in both dev and production
 const basename = process.env.NODE_ENV === 'production' ? '/Bookbot-Personas/' : '/';
+
+// Debug component to log current route
+const RouteDebugger = () => {
+  const location = useLocation();
+  
+  useEffect(() => {
+    console.log('Current route:', location.pathname);
+    console.log('Current search:', location.search);
+    console.log('Current hash:', location.hash);
+    console.log('Basename:', basename);
+  }, [location]);
+  
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -22,6 +37,7 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter basename={basename}>
+          <RouteDebugger />
           <Routes>
             <Route 
               path="/" 
