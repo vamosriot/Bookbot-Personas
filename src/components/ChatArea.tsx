@@ -9,6 +9,7 @@ import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { personas } from "@/config/personas";
 import { MessageWithFiles } from "./MessageWithFiles";
+import { openAIService } from "@/services/openai";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -55,17 +56,39 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
         persona_id: selectedPersona.id
       });
 
-      // TODO: Add AI response here when Cloudflare Worker is set up
-      // For now, we'll add a placeholder response
-      setTimeout(async () => {
-        await addMessage({
-          conversation_id: currentConversation.id,
-          content: `Hello! I'm ${selectedPersona.displayName}. ${selectedPersona.description}. I'd be happy to help you! (Note: AI responses will work once the OpenAI integration is set up.)`,
-          role: 'assistant',
-          persona_id: selectedPersona.id
-        });
-        setIsSending(false);
-      }, 1000);
+      // Get AI response using OpenAI service
+      let aiResponseContent = '';
+      
+      await openAIService.sendMessage(
+        messages, // Pass current messages for context
+        selectedPersona.id,
+        (chunk: string) => {
+          // Handle streaming response chunks
+          aiResponseContent += chunk;
+        },
+        async (fullResponse: string) => {
+          // Handle complete response
+          await addMessage({
+            conversation_id: currentConversation.id,
+            content: fullResponse,
+            role: 'assistant',
+            persona_id: selectedPersona.id
+          });
+          setIsSending(false);
+        },
+        (error: string) => {
+          // Handle error
+          console.error('OpenAI API error:', error);
+          // Add fallback message
+          addMessage({
+            conversation_id: currentConversation.id,
+            content: `I apologize, but I'm having trouble connecting to the AI service right now. Error: ${error}. Please try again later.`,
+            role: 'assistant',
+            persona_id: selectedPersona.id
+          });
+          setIsSending(false);
+        }
+      );
 
     } catch (err) {
       console.error('Error sending message:', err);

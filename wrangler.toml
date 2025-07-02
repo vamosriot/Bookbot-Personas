@@ -1,0 +1,15 @@
+name = "bookbot-openai-worker"
+main = "src/index.js"
+compatibility_date = "2023-12-18"
+
+[env.production]
+name = "bookbot-openai-worker"
+
+[vars]
+# Environment variables will be set via wrangler CLI or dashboard
+# OPENAI_API_KEY will be set as a secret
+
+[[kv_namespaces]]
+binding = "RATE_LIMITER"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-kv-namespace-id" 

@@ -172,4 +172,146 @@ This project is licensed under the MIT License.
 
 ---
 
-Made with ❤️ by [vamosriot](https://github.com/vamosriot) 
+Made with ❤️ by [vamosriot](https://github.com/vamosriot)
+
+# Bookbot OpenAI Worker
+
+This Cloudflare Worker acts as a secure proxy between your Bookbot Personas React app and the OpenAI API.
+
+## Features
+
+- 🔒 **Secure API Key Management**: Your OpenAI API key is stored securely in Cloudflare
+- 🌐 **CORS Support**: Enables cross-origin requests from your React app
+- ⚡ **Fast & Reliable**: Cloudflare's global edge network
+- 📝 **Request Validation**: Validates requests before forwarding to OpenAI
+- 🚨 **Error Handling**: Comprehensive error handling and logging
+
+## Setup Instructions
+
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure Wrangler CLI
+
+If you haven't already, install and authenticate with Wrangler:
+
+```bash
+npm install -g wrangler
+wrangler login
+```
+
+### 3. Set Your OpenAI API Key
+
+Set your OpenAI API key as a secret:
+
+```bash
+wrangler secret put OPENAI_API_KEY
+```
+
+When prompted, paste your OpenAI API key.
+
+### 4. Deploy to Cloudflare
+
+```bash
+npm run deploy
+```
+
+### 5. Get Your Worker URL
+
+After deployment, you'll get a URL like:
+```
+https://bookbot-openai-worker.your-username.workers.dev
+```
+
+### 6. Update Your React App
+
+Add this URL to your GitHub repository secrets as `VITE_CLOUDFLARE_WORKER_URL`.
+
+## Development
+
+### Local Development
+
+```bash
+npm run dev
+```
+
+This starts a local development server at `http://localhost:8787`
+
+### Testing the Worker
+
+You can test the worker with curl:
+
+```bash
+curl -X POST https://your-worker-url.workers.dev \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }'
+```
+
+## API Reference
+
+### POST /
+
+Proxies chat completion requests to OpenAI.
+
+**Request Body:**
+```json
+{
+  "messages": [
+    {"role": "user", "content": "Your message"}
+  ],
+  "model": "gpt-4-turbo-preview",
+  "temperature": 0.7,
+  "max_tokens": 4096
+}
+```
+
+**Response:**
+Standard OpenAI chat completion response.
+
+## Security
+
+- API keys are stored as encrypted secrets in Cloudflare
+- CORS is configured to allow requests from your domain
+- Input validation prevents malicious requests
+- Comprehensive error handling prevents information leakage
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"OpenAI API key not configured"**
+   - Make sure you've set the secret: `wrangler secret put OPENAI_API_KEY`
+
+2. **CORS errors**
+   - Update the `corsHeaders` in `src/index.js` to match your domain
+
+3. **Deployment fails**
+   - Check that you're logged in: `wrangler whoami`
+   - Verify your account has Workers enabled
+
+### Logs
+
+View real-time logs:
+```bash
+wrangler tail
+```
+
+## Cost Considerations
+
+- Cloudflare Workers: 100,000 requests/day on free tier
+- OpenAI API: Pay per token used
+- No additional hosting costs
+
+## Support
+
+For issues related to:
+- Cloudflare Workers: [Cloudflare Docs](https://developers.cloudflare.com/workers/)
+- OpenAI API: [OpenAI Docs](https://platform.openai.com/docs)
+- This worker: Check the GitHub repository 
