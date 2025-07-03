@@ -10,6 +10,7 @@ import {
   subscribeToConversations,
   subscribeToMessages 
 } from '@/lib/supabase';
+import { DatabaseService } from '@/services/database';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES, STORAGE_KEYS } from '@/config/constants';
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -72,6 +73,24 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       setError(null);
       const userConversations = await getConversations(user.id);
       setConversations(userConversations);
+      
+      // Auto-conversation logic: automatically select first conversation or create new one
+      if (userConversations.length > 0) {
+        const firstConversation = userConversations[0];
+        setCurrentConversation(firstConversation);
+        
+        // Set persona for this conversation
+        const persona = getPersonaById(firstConversation.persona_id);
+        if (persona) {
+          setSelectedPersona(persona);
+        }
+        
+        // Load messages for the first conversation
+        await loadMessages(firstConversation.id);
+      } else {
+        // Auto-create first conversation with default persona
+        await createNewConversation(getDefaultPersona().id);
+      }
     } catch (err: any) {
       console.error('Error loading conversations:', err);
       setError(ERROR_MESSAGES.CONVERSATION_LOAD_ERROR);
@@ -184,13 +203,26 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       setIsLoading(true);
       setError(null);
 
-      // TODO: Implement delete conversation in Supabase
-      // For now, we'll just remove it from local state
+      // Use database service to properly delete conversation
+      const databaseService = DatabaseService.getInstance();
+      await databaseService.deleteConversation(conversationId);
+      
+      // Update conversations list
       setConversations(prev => prev.filter(conv => conv.id !== conversationId));
       
+      // Handle conversation switching logic
       if (currentConversation?.id === conversationId) {
-        setCurrentConversation(null);
-        setMessages([]);
+        // Switch to another conversation or create new one
+        const remainingConversations = conversations.filter(conv => conv.id !== conversationId);
+        if (remainingConversations.length > 0) {
+          // Switch to the first remaining conversation
+          await switchConversation(remainingConversations[0].id);
+        } else {
+          // No conversations left, create a new one
+          setCurrentConversation(null);
+          setMessages([]);
+          await createNewConversation(selectedPersona.id);
+        }
       }
       
     } catch (err: any) {

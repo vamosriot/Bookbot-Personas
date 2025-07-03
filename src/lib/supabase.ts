@@ -212,6 +212,7 @@ export const createMessage = async (message: {
   content: string;
   role: 'user' | 'assistant';
   persona_id?: string;
+  files?: any[];
 }) => {
   if (!supabase) {
     throw new Error('Supabase not initialized');
@@ -219,7 +220,12 @@ export const createMessage = async (message: {
   
   const { data, error } = await supabase
     .from('messages')
-    .insert(message)
+    .insert({
+      conversation_id: message.conversation_id,
+      content: message.content,
+      role: message.role,
+      persona_id: message.persona_id
+    })
     .select()
     .single();
 
@@ -227,7 +233,94 @@ export const createMessage = async (message: {
     throw error;
   }
 
+  // Handle file attachments if provided
+  if (message.files && message.files.length > 0) {
+    const fileAttachments = message.files.map(file => ({
+      message_id: data.id,
+      file_name: file.name,
+      file_type: file.type,
+      file_size: file.size,
+      file_url: file.url,
+      storage_path: file.storage_path || ''
+    }));
+
+    const { error: fileError } = await supabase
+      .from('file_attachments')
+      .insert(fileAttachments);
+
+    if (fileError) {
+      console.error('Error inserting file attachments:', fileError);
+      // Don't throw here as the message was already created
+    }
+  }
+
   return data;
+};
+
+export const deleteConversation = async (conversationId: string) => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+
+  // Get all messages in the conversation with their file attachments
+  const { data: messages, error: messagesError } = await supabase
+    .from('messages')
+    .select(`
+      id,
+      file_attachments (
+        id,
+        storage_path
+      )
+    `)
+    .eq('conversation_id', conversationId);
+
+  if (messagesError) {
+    throw messagesError;
+  }
+
+  // Delete all file attachments from storage
+  for (const message of messages || []) {
+    if (message.file_attachments) {
+      for (const attachment of message.file_attachments) {
+        try {
+          await deleteFile(attachment.storage_path);
+        } catch (err) {
+          console.error('Error deleting file from storage:', err);
+          // Continue with cleanup even if file deletion fails
+        }
+      }
+    }
+  }
+
+  // Delete file attachment records
+  const { error: fileAttachmentsError } = await supabase
+    .from('file_attachments')
+    .delete()
+    .in('message_id', messages?.map(m => m.id) || []);
+
+  if (fileAttachmentsError) {
+    throw fileAttachmentsError;
+  }
+
+  // Delete all messages in the conversation
+  const { error: messagesDeleteError } = await supabase
+    .from('messages')
+    .delete()
+    .eq('conversation_id', conversationId);
+
+  if (messagesDeleteError) {
+    throw messagesDeleteError;
+  }
+
+  // Finally, delete the conversation
+  const { error: conversationError } = await supabase
+    .from('conversations')
+    .delete()
+    .eq('id', conversationId);
+
+  if (conversationError) {
+    throw conversationError;
+  }
 };
 
 // Real-time subscriptions
@@ -247,7 +340,12 @@ export const subscribeToConversations = (userId: string, callback: (payload: any
         table: 'conversations',
         filter: `user_id=eq.${userId}`
       },
-      callback
+      (payload) => {
+        callback({
+          ...payload,
+          eventType: payload.eventType
+        });
+      }
     )
     .subscribe();
 };
@@ -268,7 +366,12 @@ export const subscribeToMessages = (conversationId: string, callback: (payload: 
         table: 'messages',
         filter: `conversation_id=eq.${conversationId}`
       },
-      callback
+      (payload) => {
+        callback({
+          ...payload,
+          eventType: payload.eventType
+        });
+      }
     )
     .subscribe();
 }; 

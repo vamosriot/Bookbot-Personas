@@ -9,7 +9,10 @@ import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { personas } from "@/config/personas";
 import { MessageWithFiles } from "./MessageWithFiles";
+import { FileUpload } from "./FileUpload";
+import { useFileUpload } from "@/hooks/useFileUpload";
 import { openAIService } from "@/services/openai";
+import { FileAttachment } from "@/types";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -31,6 +34,7 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
   
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -41,20 +45,24 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !currentConversation || isSending) return;
+    if ((!inputValue.trim() && pendingFiles.length === 0) || !currentConversation || isSending) return;
 
     const messageContent = inputValue.trim();
     setInputValue("");
     setIsSending(true);
 
     try {
-      // Add user message
+      // Add user message with pending files
       await addMessage({
         conversation_id: currentConversation.id,
         content: messageContent,
         role: 'user',
-        persona_id: selectedPersona.id
+        persona_id: selectedPersona.id,
+        files: pendingFiles
       });
+
+      // Clear pending files after sending
+      setPendingFiles([]);
 
       // Get AI response using OpenAI service
       let aiResponseContent = '';
@@ -112,48 +120,13 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     }
   };
 
-  // Show empty state if no conversation is selected
-  if (!currentConversation) {
-    return (
-      <div className="flex-1 flex flex-col h-full bg-background">
-        <div className="border-b border-border p-4 flex items-center justify-between bg-background">
-          <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="icon" onClick={onToggleSidebar} className="md:hidden hover:bg-accent">
-              <Menu className="h-5 w-5" />
-            </Button>
-            <span className="font-medium text-foreground">Select a conversation or create a new one</span>
-          </div>
-        </div>
-        
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <h3 className="text-lg font-medium text-foreground">No conversation selected</h3>
-            <p className="text-muted-foreground">Choose a persona to start chatting</p>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Start New Conversation
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-64 bg-popover border-border shadow-md z-50">
-                {personas.map((persona) => (
-                  <DropdownMenuItem
-                    key={persona.id}
-                    onClick={() => handlePersonaChange(persona)}
-                    className="flex flex-col items-start p-3 hover:bg-accent cursor-pointer focus:bg-accent"
-                  >
-                    <span className="font-medium text-foreground">{persona.displayName}</span>
-                    <span className="text-sm text-muted-foreground">{persona.description}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleFilesUploaded = (attachments: FileAttachment[]) => {
+    setPendingFiles(prev => [...prev, ...attachments]);
+  };
+
+  const handleRemovePendingFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
@@ -250,7 +223,35 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
 
       {/* Input Area */}
       <div className="border-t border-border p-4 bg-background">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto space-y-3">
+          {/* File Upload Component */}
+          <FileUpload 
+            onFilesUploaded={handleFilesUploaded}
+            maxFiles={5}
+            disabled={isSending || isLoading}
+            className="w-full"
+          />
+
+          {/* Pending Files Display */}
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 p-2 bg-muted rounded-lg">
+              {pendingFiles.map((file, index) => (
+                <div key={index} className="flex items-center space-x-2 bg-background px-3 py-1 rounded-full text-sm">
+                  <span className="truncate max-w-[200px]">{file.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRemovePendingFile(index)}
+                    className="h-4 w-4 p-0 hover:bg-destructive/20"
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Message Input */}
           <div className="relative">
             <Textarea
               value={inputValue}
@@ -263,14 +264,14 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
             />
             <Button
               onClick={handleSendMessage}
-              disabled={!inputValue.trim() || isSending || isLoading}
+              disabled={(!inputValue.trim() && pendingFiles.length === 0) || isSending || isLoading}
               size="icon"
               className="absolute right-2 bottom-2 h-8 w-8 bg-primary hover:bg-primary/90 shadow-sm"
             >
               <Send className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground text-center mt-2">
+          <p className="text-xs text-muted-foreground text-center">
             Press Enter to send, Shift+Enter for new line
           </p>
         </div>

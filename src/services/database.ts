@@ -7,6 +7,7 @@ import {
   subscribeToConversations,
   subscribeToMessages
 } from '@/lib/supabase';
+import { fileUploadService } from '@/services/fileUpload';
 import { Conversation, Message, ConversationRow, MessageRow } from '@/types';
 import { DB_TABLES, ERROR_MESSAGES, PAGINATION } from '@/config/constants';
 
@@ -152,10 +153,31 @@ export class DatabaseService {
     content: string;
     role: 'user' | 'assistant';
     persona_id?: string;
+    files?: any[];
   }): Promise<Message> {
     try {
-      const dbMessage = await supabaseCreateMessage(messageData);
+      // Create the message first
+      const dbMessage = await supabaseCreateMessage({
+        conversation_id: messageData.conversation_id,
+        content: messageData.content,
+        role: messageData.role,
+        persona_id: messageData.persona_id
+      });
       
+      // Handle file attachments if provided
+      if (messageData.files && messageData.files.length > 0) {
+        for (const file of messageData.files) {
+          await fileUploadService.saveFileAttachment({
+            message_id: dbMessage.id,
+            file_name: file.name,
+            file_type: file.type,
+            file_size: file.size,
+            file_url: file.url,
+            storage_path: file.storage_path || ''
+          });
+        }
+      }
+
       // Update conversation activity
       await this.updateConversationActivity(messageData.conversation_id);
       await this.incrementMessageCount(messageData.conversation_id);
@@ -224,6 +246,7 @@ export class DatabaseService {
     }
   }
 
+  // Helper methods
   private async deleteMessagesInConversation(conversationId: string): Promise<void> {
     try {
       // Get all messages in the conversation
@@ -237,11 +260,11 @@ export class DatabaseService {
       }
 
       // Delete file attachments for all messages
-      for (const message of messages) {
+      for (const message of messages || []) {
         await this.deleteMessageFileAttachments(message.id);
       }
 
-      // Delete all messages
+      // Delete all messages in the conversation
       const { error: deleteError } = await supabase
         .from(DB_TABLES.MESSAGES)
         .delete()
@@ -252,45 +275,69 @@ export class DatabaseService {
       }
     } catch (error: any) {
       console.error('Error deleting messages in conversation:', error);
-      throw error;
+      throw new Error(ERROR_MESSAGES.SUPABASE_CONNECTION_ERROR);
     }
   }
 
   private async deleteMessageFileAttachments(messageId: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from(DB_TABLES.FILE_ATTACHMENTS)
+      // Get all file attachments for the message
+      const { data: attachments, error: fetchError } = await supabase
+        .from('file_attachments')
+        .select('storage_path')
+        .eq('message_id', messageId);
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Delete files from storage
+      for (const attachment of attachments || []) {
+        try {
+          await fileUploadService.deleteFile(attachment.storage_path);
+        } catch (err) {
+          console.error('Error deleting file from storage:', err);
+          // Continue with cleanup even if file deletion fails
+        }
+      }
+
+      // Delete file attachment records
+      const { error: deleteError } = await supabase
+        .from('file_attachments')
         .delete()
         .eq('message_id', messageId);
 
-      if (error) {
-        throw error;
+      if (deleteError) {
+        throw deleteError;
       }
     } catch (error: any) {
-      console.error('Error deleting message file attachments:', error);
-      // Don't throw here as this is cleanup
+      console.error('Error deleting file attachments:', error);
+      // Don't throw here as this is part of cleanup
     }
   }
 
   private async incrementMessageCount(conversationId: string): Promise<void> {
     try {
-      const { error } = await supabase.rpc('increment_message_count', {
-        conversation_id: conversationId
-      });
+      const { data: conversation, error: fetchError } = await supabase
+        .from(DB_TABLES.CONVERSATIONS)
+        .select('message_count')
+        .eq('id', conversationId)
+        .single();
 
-      if (error) {
-        // If RPC doesn't exist, fall back to manual count
-        const { data, error: countError } = await supabase
-          .from(DB_TABLES.MESSAGES)
-          .select('id', { count: 'exact' })
-          .eq('conversation_id', conversationId);
+      if (fetchError) {
+        throw fetchError;
+      }
 
-        if (!countError && data) {
-          await supabase
-            .from(DB_TABLES.CONVERSATIONS)
-            .update({ message_count: data.length })
-            .eq('id', conversationId);
-        }
+      const { error: updateError } = await supabase
+        .from(DB_TABLES.CONVERSATIONS)
+        .update({
+          message_count: (conversation.message_count || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversationId);
+
+      if (updateError) {
+        throw updateError;
       }
     } catch (error: any) {
       console.error('Error incrementing message count:', error);
@@ -309,7 +356,7 @@ export class DatabaseService {
         .from(DB_TABLES.CONVERSATIONS)
         .select('*')
         .eq('user_id', userId)
-        .or(`title.ilike.%${query}%`)
+        .ilike('title', `%${query}%`)
         .order('last_message_at', { ascending: false })
         .limit(limit);
 
@@ -332,7 +379,10 @@ export class DatabaseService {
     try {
       const { data, error } = await supabase
         .from(DB_TABLES.MESSAGES)
-        .select('*')
+        .select(`
+          *,
+          file_attachments (*)
+        `)
         .eq('conversation_id', conversationId)
         .ilike('content', `%${query}%`)
         .order('created_at', { ascending: false })
@@ -349,7 +399,7 @@ export class DatabaseService {
     }
   }
 
-  // Real-time subscriptions
+  // Subscription methods
   subscribeToConversations(userId: string, callback: (payload: any) => void) {
     return subscribeToConversations(userId, callback);
   }
@@ -358,7 +408,7 @@ export class DatabaseService {
     return subscribeToMessages(conversationId, callback);
   }
 
-  // Utility methods for data mapping
+  // Mapping methods
   private mapConversationRowToConversation(row: ConversationRow): Conversation {
     return {
       id: row.id,
@@ -385,14 +435,14 @@ export class DatabaseService {
     };
   }
 
-  // Analytics and stats
+  // Statistics
   async getConversationStats(userId: string): Promise<{
     totalConversations: number;
     totalMessages: number;
     averageMessagesPerConversation: number;
   }> {
     try {
-      const { data: conversations, error: convError } = await supabase
+      const { data: conversationData, error: convError } = await supabase
         .from(DB_TABLES.CONVERSATIONS)
         .select('id, message_count')
         .eq('user_id', userId);
@@ -401,16 +451,14 @@ export class DatabaseService {
         throw convError;
       }
 
-      const totalConversations = conversations.length;
-      const totalMessages = conversations.reduce((sum, conv) => sum + conv.message_count, 0);
-      const averageMessagesPerConversation = totalConversations > 0 
-        ? totalMessages / totalConversations 
-        : 0;
+      const totalConversations = conversationData.length;
+      const totalMessages = conversationData.reduce((sum, conv) => sum + conv.message_count, 0);
+      const averageMessagesPerConversation = totalConversations > 0 ? totalMessages / totalConversations : 0;
 
       return {
         totalConversations,
         totalMessages,
-        averageMessagesPerConversation: Math.round(averageMessagesPerConversation * 100) / 100
+        averageMessagesPerConversation
       };
     } catch (error: any) {
       console.error('Error fetching conversation stats:', error);
@@ -419,5 +467,4 @@ export class DatabaseService {
   }
 }
 
-// Export singleton instance
 export const databaseService = DatabaseService.getInstance(); 

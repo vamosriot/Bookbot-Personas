@@ -1,14 +1,11 @@
-
 import { useState } from "react";
 import { Search, Plus, MessageSquare, Settings, User, Menu, LogOut, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useChat as useChatContext } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { personas } from "@/config/personas";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -23,7 +20,6 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
     conversations,
     currentConversation,
     selectedPersona,
-    setSelectedPersona,
     createNewConversation,
     switchConversation,
     deleteConversation,
@@ -100,30 +96,6 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
         </div>
         
         <div className="space-y-3 mb-3">
-          <Select value={selectedPersona.id} onValueChange={(value) => {
-            const persona = personas.find(p => p.id === value);
-            if (persona) setSelectedPersona(persona);
-          }}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a persona">
-                <div className="flex items-center space-x-2">
-                  <span>{selectedPersona.avatar}</span>
-                  <span>{selectedPersona.displayName}</span>
-                </div>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {personas.map((persona) => (
-                <SelectItem key={persona.id} value={persona.id}>
-                  <div className="flex items-center space-x-2">
-                    <span>{persona.avatar}</span>
-                    <span>{persona.displayName}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Button 
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
             onClick={handleNewConversation}
