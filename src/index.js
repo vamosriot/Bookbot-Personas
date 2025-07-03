@@ -66,7 +66,7 @@ export default {
 
       // Prepare the OpenAI request
       const openAiRequest = {
-        model: requestBody.model || 'gpt-4-turbo-preview',
+        model: requestBody.model || 'gpt-4o',
         messages: requestBody.messages,
         max_tokens: requestBody.max_tokens || 4096,
         temperature: requestBody.temperature || 0.7,
