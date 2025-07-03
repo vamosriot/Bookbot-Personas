@@ -4,7 +4,7 @@ A modern AI chatbot application featuring 5 distinct AI personas, built with Rea
 
 ## 🌟 Features
 
-- **5 AI Personas**: Each with unique characteristics and conversation styles
+- **5 AI Personas (Placeholders)**: Each with unique characteristics and conversation styles
   - **Pepa**: Warm, encouraging life coach
   - **Jarka**: Analytical, structured problem solver
   - **Honza**: Creative, humorous storyteller
