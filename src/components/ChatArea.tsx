@@ -52,7 +52,19 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     setIsSending(true);
 
     try {
-      // Add user message with pending files
+      // Create the current user message object
+      const currentUserMessage = {
+        id: `temp-${Date.now()}`, // Temporary ID
+        conversation_id: currentConversation.id,
+        content: messageContent,
+        role: 'user' as const,
+        persona_id: selectedPersona.id,
+        files: pendingFiles,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Add user message to database
       await addMessage({
         conversation_id: currentConversation.id,
         content: messageContent,
@@ -64,11 +76,14 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
       // Clear pending files after sending
       setPendingFiles([]);
 
-      // Get AI response using OpenAI service
+      // Create complete message context including the current user message
+      const messagesWithCurrentUser = [...messages, currentUserMessage];
+
+      // Get AI response using OpenAI service with complete context
       let aiResponseContent = '';
       
       await openAIService.sendMessage(
-        messages, // Pass current messages for context
+        messagesWithCurrentUser, // Pass messages including current user message
         selectedPersona.id,
         (chunk: string) => {
           // Handle streaming response chunks
