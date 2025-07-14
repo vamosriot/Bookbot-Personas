@@ -1,80 +1,97 @@
-import { useState } from "react";
-import { Search, Plus, MessageSquare, Settings, User, Menu, LogOut, Trash2, Target } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
-import { useChat as useChatContext } from "@/contexts/ChatContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useChat } from '@/contexts/ChatContext';
+import { Conversation, Message } from '@/types';
+import { 
+  Menu, 
+  Plus, 
+  Search, 
+  MessageSquare, 
+  Users,
+  MoreVertical,
+  Trash2,
+  Edit2,
+  Clock
+} from 'lucide-react';
 
 interface SidebarProps {
+  selectedConversation: string | null;
+  onSelectConversation: (id: string | null) => void;
   isOpen: boolean;
   onToggle: () => void;
+  onShowPersonas?: () => void;
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const { signOut, user } = useAuth();
+export function Sidebar({ 
+  selectedConversation, 
+  onSelectConversation, 
+  isOpen, 
+  onToggle,
+  onShowPersonas 
+}: SidebarProps) {
   const navigate = useNavigate();
-  
-  const {
-    conversations,
-    currentConversation,
-    selectedPersona,
-    createNewConversation,
-    switchConversation,
-    deleteConversation,
+  const { 
+    conversations, 
+    createNewConversation, 
+    deleteConversation, 
     isLoading,
-    error
-  } = useChatContext();
+    selectedPersona 
+  } = useChat();
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState<string | null>(null);
 
-  const filteredConversations = conversations.filter(
-    (conv) =>
-      conv.title.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter conversations based on search term
+  const filteredConversations = conversations.filter(conversation =>
+    conversation.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const formatTimestamp = (timestamp: string): string => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-    if (diffInHours < 1) {
-      return 'Just now';
-    } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)} hour${Math.floor(diffInHours) !== 1 ? 's' : ''} ago`;
-    } else if (diffInHours < 7 * 24) {
-      const days = Math.floor(diffInHours / 24);
-      return `${days} day${days !== 1 ? 's' : ''} ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
-  };
 
   const handleNewConversation = async () => {
     try {
       await createNewConversation(selectedPersona.id);
-    } catch (err) {
-      console.error('Error creating new conversation:', err);
+      onSelectConversation(null); // This will trigger loading of the new conversation
+    } catch (error) {
+      console.error('Failed to create new conversation:', error);
     }
   };
 
-  const handleDeleteConversation = async (conversationId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteConversation = async (conversationId: string) => {
     try {
       await deleteConversation(conversationId);
-    } catch (err) {
-      console.error('Error deleting conversation:', err);
+      if (selectedConversation === conversationId) {
+        onSelectConversation(null);
+      }
+      setShowDropdown(null);
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch (err) {
-      console.error('Error signing out:', err);
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInHours < 7 * 24) {
+      return date.toLocaleDateString([], { weekday: 'short' });
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setShowDropdown(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   if (!isOpen) {
     return (
@@ -107,14 +124,16 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             New Conversation
           </Button>
           
-          <Button 
-            variant="outline" 
-            className="w-full"
-            onClick={() => navigate('/marketing-lab')}
-          >
-            <Target className="h-4 w-4 mr-2" />
-            Marketing Lab
-          </Button>
+          {onShowPersonas && (
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={onShowPersonas}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              View Personas
+            </Button>
+          )}
         </div>
 
         <div className="relative">
@@ -129,91 +148,102 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       </div>
 
       {/* Conversations List */}
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          {isLoading && (
-            <div className="text-center text-sm text-muted-foreground py-4">
-              Loading conversations...
+      <ScrollArea className="flex-1 px-2">
+        <div className="space-y-2 py-2">
+          {filteredConversations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">
+                {searchTerm ? 'No conversations found' : 'No conversations yet'}
+              </p>
+              <p className="text-xs mt-1">
+                {searchTerm ? 'Try a different search term' : 'Start a new conversation to begin'}
+              </p>
             </div>
-          )}
-          
-          {error && (
-            <div className="text-center text-sm text-red-600 py-4">
-              {error}
-            </div>
-          )}
-          
-          {!isLoading && !error && filteredConversations.length === 0 && (
-            <div className="text-center text-sm text-muted-foreground py-4">
-              {searchTerm ? 'No conversations found' : 'No conversations yet. Create your first one!'}
-            </div>
-          )}
-          
-          {filteredConversations.map((conversation) => (
-            <div key={conversation.id} className="relative group">
-              <Button
-                variant="ghost"
-                className={cn(
-                  "w-full p-3 h-auto justify-start mb-1 text-left hover:bg-sidebar-accent transition-colors rounded-lg",
-                  currentConversation?.id === conversation.id && "bg-sidebar-accent border border-sidebar-border"
-                )}
-                onClick={() => switchConversation(conversation.id)}
+          ) : (
+            filteredConversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`relative group rounded-lg p-3 cursor-pointer transition-all hover:bg-sidebar-accent ${
+                  selectedConversation === conversation.id
+                    ? 'bg-sidebar-accent ring-1 ring-sidebar-accent-foreground/20'
+                    : ''
+                }`}
+                onClick={() => onSelectConversation(conversation.id)}
               >
-                <div className="flex items-start space-x-3 w-full">
-                  <MessageSquare className="h-4 w-4 mt-1 text-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate text-sm text-sidebar-foreground">
-                      {conversation.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {conversation.message_count} message{conversation.message_count !== 1 ? 's' : ''}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatTimestamp(conversation.last_message_at)}
-                    </p>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start space-x-3 flex-1 min-w-0">
+                    <Avatar className="h-8 w-8 flex-shrink-0 mt-0.5">
+                      <AvatarFallback 
+                        className="text-xs font-medium"
+                        style={{ backgroundColor: selectedPersona.color }}
+                      >
+                        {selectedPersona.avatar}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <h3 className="font-medium text-sm text-sidebar-foreground truncate">
+                          {conversation.title}
+                        </h3>
+                        <Badge variant="secondary" className="text-xs">
+                          {conversation.message_count}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{formatDate(conversation.last_message_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowDropdown(showDropdown === conversation.id ? null : conversation.id);
+                      }}
+                    >
+                      <MoreVertical className="h-3 w-3" />
+                    </Button>
+                    
+                    {showDropdown === conversation.id && (
+                      <div className="absolute right-0 top-full mt-1 w-32 bg-background border border-border rounded-md shadow-lg z-50">
+                        <div className="py-1">
+                          <button
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center space-x-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Handle edit functionality
+                              setShowDropdown(null);
+                            }}
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            <span>Rename</span>
+                          </button>
+                          <button
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground text-destructive flex items-center space-x-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteConversation(conversation.id);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </Button>
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                onClick={(e) => handleDeleteConversation(conversation.id, e)}
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
+              </div>
+            ))
+          )}
         </div>
       </ScrollArea>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center space-x-2 text-sm text-sidebar-foreground">
-              <User className="h-4 w-4" />
-              <span className="truncate max-w-[120px]">{user?.email}</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-1">
-            <Button variant="ghost" size="icon" className="text-sidebar-foreground hover:bg-sidebar-accent">
-              <Settings className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-sidebar-foreground hover:bg-sidebar-accent"
-              onClick={handleSignOut}
-              title="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

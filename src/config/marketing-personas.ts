@@ -437,7 +437,7 @@ export const getAllMarketingPersonas = (): MarketingPersona[] => {
 };
 
 export const getMarketingPersonaById = (id: string): MarketingPersona | undefined => {
-  return marketingPersonas[id];
+  return Object.values(marketingPersonas).find(persona => persona.id === id);
 };
 
 export const getMarketingPersonasBySegment = (segment: string): MarketingPersona[] => {
@@ -455,58 +455,4 @@ export const convertToRegularPersonas = (): Persona[] => {
     avatar: persona.avatar,
     color: persona.color
   }));
-};
-
-// Test scenario templates
-export const testScenarios = {
-  campaign: {
-    title: "Test Marketing Campaign Response",
-    description: "Test how each persona responds to marketing campaigns",
-    prompts: [
-      "We're launching a campaign: 'Give Books a Second Chapter - 50% off all used books this weekend!'",
-      "Our new slogan is 'Every Book Deserves a Second Story' - what do you think?",
-      "We're promoting sustainability: 'Save trees, save money - buy used books!'",
-      "Limited time offer: 'Buy 3 used books, get 1 free - this weekend only!'"
-    ]
-  },
-  feature: {
-    title: "Test New Feature Reaction",
-    description: "Test how personas react to new platform features",
-    prompts: [
-      "We're adding a new feature where you can see a 360° view of each book's condition",
-      "We're launching a 'Book Condition Guarantee' - if you're not satisfied, we'll refund or replace",
-      "New feature: AI-powered book recommendations based on your reading history",
-      "We're adding a feature to pre-order upcoming second-hand releases from popular series"
-    ]
-  },
-  pricing: {
-    title: "Test Pricing Strategy",
-    description: "Test reaction to different pricing models",
-    prompts: [
-      "We're considering a subscription model - €9.99/month for unlimited free shipping",
-      "New pricing: Books under €5 have €1 shipping, books over €15 have free shipping",
-      "We're introducing a 'Book Trade-In' program where you get 30% more credit vs cash",
-      "Premium membership: €29.99/year for early access to rare books and 15% off everything"
-    ]
-  },
-  ux: {
-    title: "Test UX/UI Changes",
-    description: "Test reaction to user experience improvements",
-    prompts: [
-      "We're redesigning the search to show book conditions with color-coded labels",
-      "New checkout process: one-click buying with saved payment methods",
-      "We're adding a 'Wishlist Alert' that notifies you when books become available",
-      "New mobile app feature: scan any book to see if we have it second-hand"
-    ]
-  },
-  communication: {
-    title: "Test Communication Tone",
-    description: "Test different communication styles",
-    prompts: [
-      "Formal: 'We are pleased to inform you about our new inventory management system'",
-      "Casual: 'Hey book lover! Check out these awesome finds we just got in stock!'",
-      "Humorous: 'Warning: May cause sudden urge to buy more books than you can fit on your shelves'",
-      "Educational: 'Did you know? Buying used books reduces carbon footprint by 70%'"
-    ]
-  }
 }; 

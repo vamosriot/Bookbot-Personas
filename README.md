@@ -1,6 +1,6 @@
 # Bookbot Personas 🤖
 
-A modern AI-powered marketing research tool featuring 5 customer personas for testing campaigns and validating product features, built with React, TypeScript, and Supabase.
+A modern AI-powered customer research tool featuring 5 detailed customer personas based on European book market research, built with React, TypeScript, and Supabase.
 
 ## 🌟 Features
 
@@ -11,13 +11,13 @@ A modern AI-powered marketing research tool featuring 5 customer personas for te
   - **The Student**: Budget-constrained, textbook-focused, peer-influenced
   - **The Parent**: Educational focus, age-appropriate content, family-oriented
 
-- **Marketing Testing Lab**: Test campaigns, features, and messaging with customer personas
+- **Interactive Chat Interface**: Have conversations with each persona to understand their needs
 - **Complete Authentication System**: Secure login, signup, and password reset
 - **Real-time Chat**: Live conversation updates using Supabase subscriptions
-- **File Upload Support**: Drag-and-drop file attachments in conversations
+- **File Upload Support**: Drag-and-drop file attachments in conversations (images and documents)
 - **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui components
 - **Persistent Chat History**: All conversations saved and synchronized
-- **Customer Segment Insights**: Detailed demographics, psychographics, and behavioral data
+- **Detailed Customer Insights**: Demographics, psychographics, and behavioral data for each persona
 
 ## 🚀 Live Demo
 
@@ -97,222 +97,127 @@ create table public.messages (
 create table public.file_attachments (
   id uuid default gen_random_uuid() primary key,
   message_id uuid references public.messages(id) on delete cascade not null,
-  file_name text not null,
-  file_size integer not null,
-  file_type text not null,
-  file_url text not null,
-  storage_path text not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+  name text not null,
+  type text not null,
+  size integer not null,
+  url text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Create storage bucket
-insert into storage.buckets (id, name, public) values ('file-attachments', 'file-attachments', true);
-
--- Enable RLS and create policies
+-- Set up Row Level Security (RLS)
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
 alter table public.file_attachments enable row level security;
 
--- Add RLS policies (see full schema in docs)
+-- Create policies
+create policy "Users can only see their own conversations" on public.conversations
+  for all using (auth.uid() = user_id);
+
+create policy "Users can only see messages from their conversations" on public.messages
+  for all using (
+    conversation_id in (
+      select id from public.conversations where user_id = auth.uid()
+    )
+  );
+
+create policy "Users can only see their own file attachments" on public.file_attachments
+  for all using (
+    message_id in (
+      select m.id from public.messages m
+      join public.conversations c on m.conversation_id = c.id
+      where c.user_id = auth.uid()
+    )
+  );
+
+-- Create storage bucket for file attachments
+insert into storage.buckets (id, name, public) values ('file-attachments', 'file-attachments', true);
+
+-- Create storage policies
+create policy "Anyone can upload files" on storage.objects for insert with check (bucket_id = 'file-attachments');
+create policy "Anyone can view files" on storage.objects for select using (bucket_id = 'file-attachments');
+create policy "Users can delete their own files" on storage.objects for delete using (bucket_id = 'file-attachments' AND auth.uid()::text = (storage.foldername(name))[1]);
 ```
+
+## 🎯 How to Use
+
+1. **Sign up/Login**: Create an account or log in to access the personas
+2. **View Personas**: Click "View Personas" to see detailed information about each customer segment
+3. **Start Chat**: Return to the main chat interface and select a persona to start a conversation
+4. **Upload Files**: Share images and documents with personas for analysis and feedback
+5. **Explore Insights**: Learn about each persona's demographics, behaviors, and pain points
+
+## 👥 Customer Personas
+
+### 📚 The Book Lover
+- **Age**: 25-45, university educated, urban Prague
+- **Reading**: 10-20 books/year, medium price sensitivity
+- **Motivation**: Rare finds, sustainability, quality over quantity
+- **Platforms**: Goodreads, Instagram, Facebook book groups
+
+### 📱 The Occasional Reader
+- **Age**: 18-50, balanced gender, Prague suburbs
+- **Reading**: 2-5 books/year, highly price-sensitive
+- **Motivation**: Trending titles, media adaptations, convenience
+- **Platforms**: Instagram, TikTok, Facebook
+
+### 🧠 The Knowledge Seeker
+- **Age**: 25-50, university+, works in tech/academia
+- **Reading**: 10-15 books/year, low price sensitivity
+- **Motivation**: Professional development, current information
+- **Platforms**: LinkedIn, Reddit, research communities
+
+### 🎓 The Student
+- **Age**: 18-25, university student, low income
+- **Reading**: Required + 2-3 leisure books/year, very price-sensitive
+- **Motivation**: Academic success, peer recommendations
+- **Platforms**: WhatsApp, Facebook student groups, Instagram
+
+### 👩‍👧‍👦 The Parent
+- **Age**: 30-45, 70% female, suburbs
+- **Reading**: Daily with kids, medium price sensitivity
+- **Motivation**: Children's education, age-appropriate content
+- **Platforms**: Facebook parenting groups, Pinterest
+
+## 🔧 Development
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+
+### Environment Variables
+
+- `VITE_SUPABASE_URL` - Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous key
+- `VITE_CLOUDFLARE_WORKER_URL` - Your Cloudflare Worker URL for OpenAI API
 
 ## 🚀 Deployment
 
-The project is configured for automatic deployment to GitHub Pages:
+This app is configured for GitHub Pages deployment. Push to main branch to automatically deploy.
 
-1. **Set up GitHub Secrets**:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-   - `VITE_CLOUDFLARE_WORKER_URL` (optional)
+## 📄 License
 
-2. **Enable GitHub Pages**:
-   - Go to repository Settings → Pages
-   - Select "GitHub Actions" as source
-
-3. **Deploy**:
-   ```bash
-   git push origin main
-   ```
-
-## 🏗️ Project Structure
-
-```
-src/
-├── components/          # React components
-│   ├── auth/           # Authentication components
-│   ├── ui/             # shadcn/ui components
-│   └── ...
-├── contexts/           # React context providers
-├── hooks/              # Custom React hooks
-├── lib/                # Utility libraries
-├── services/           # API and external services
-├── types/              # TypeScript type definitions
-├── config/             # Configuration files
-└── pages/              # Page components
-```
+MIT License - see LICENSE file for details
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
+## 🎯 Use Cases
 
-This project is licensed under the MIT License.
-
-## 🔗 Links
-
-- [Live Demo](https://vamosriot.github.io/Bookbot-Personas/)
-- [Supabase](https://supabase.com/)
-- [React](https://reactjs.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [shadcn/ui](https://ui.shadcn.com/)
+- **Market Research**: Understand different customer segments
+- **Product Development**: Get feedback from various user types
+- **Marketing Strategy**: Test messaging with different audiences
+- **Team Training**: Help teams understand customer needs
+- **Campaign Testing**: Preview how different segments might respond
 
 ---
 
-Made with ❤️ by [vamosriot](https://github.com/vamosriot)
-
-# Bookbot OpenAI Worker
-
-This Cloudflare Worker acts as a secure proxy between your Bookbot Personas React app and the OpenAI API.
-
-## Features
-
-- 🔒 **Secure API Key Management**: Your OpenAI API key is stored securely in Cloudflare
-- 🌐 **CORS Support**: Enables cross-origin requests from your React app
-- ⚡ **Fast & Reliable**: Cloudflare's global edge network
-- 📝 **Request Validation**: Validates requests before forwarding to OpenAI
-- 🚨 **Error Handling**: Comprehensive error handling and logging
-
-## Setup Instructions
-
-### 1. Install Dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure Wrangler CLI
-
-If you haven't already, install and authenticate with Wrangler:
-
-```bash
-npm install -g wrangler
-wrangler login
-```
-
-### 3. Set Your OpenAI API Key
-
-Set your OpenAI API key as a secret:
-
-```bash
-wrangler secret put OPENAI_API_KEY
-```
-
-When prompted, paste your OpenAI API key.
-
-### 4. Deploy to Cloudflare
-
-```bash
-npm run deploy
-```
-
-### 5. Get Your Worker URL
-
-After deployment, you'll get a URL like:
-```
-https://bookbot-openai-worker.your-username.workers.dev
-```
-
-### 6. Update Your React App
-
-Add this URL to your GitHub repository secrets as `VITE_CLOUDFLARE_WORKER_URL`.
-
-## Development
-
-### Local Development
-
-```bash
-npm run dev
-```
-
-This starts a local development server at `http://localhost:8787`
-
-### Testing the Worker
-
-You can test the worker with curl:
-
-```bash
-curl -X POST https://your-worker-url.workers.dev \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
-  }'
-```
-
-## API Reference
-
-### POST /
-
-Proxies chat completion requests to OpenAI.
-
-**Request Body:**
-```json
-{
-  "messages": [
-    {"role": "user", "content": "Your message"}
-  ],
-  "model": "gpt-4-turbo-preview",
-  "temperature": 0.7,
-  "max_tokens": 4096
-}
-```
-
-**Response:**
-Standard OpenAI chat completion response.
-
-## Security
-
-- API keys are stored as encrypted secrets in Cloudflare
-- CORS is configured to allow requests from your domain
-- Input validation prevents malicious requests
-- Comprehensive error handling prevents information leakage
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"OpenAI API key not configured"**
-   - Make sure you've set the secret: `wrangler secret put OPENAI_API_KEY`
-
-2. **CORS errors**
-   - Update the `corsHeaders` in `src/index.js` to match your domain
-
-3. **Deployment fails**
-   - Check that you're logged in: `wrangler whoami`
-   - Verify your account has Workers enabled
-
-### Logs
-
-View real-time logs:
-```bash
-wrangler tail
-```
-
-## Cost Considerations
-
-- Cloudflare Workers: 100,000 requests/day on free tier
-- OpenAI API: Pay per token used
-- No additional hosting costs
-
-## Support
-
-For issues related to:
-- Cloudflare Workers: [Cloudflare Docs](https://developers.cloudflare.com/workers/)
-- OpenAI API: [OpenAI Docs](https://platform.openai.com/docs)
-- This worker: Check the GitHub repository 
+Built with ❤️ using React, TypeScript, and Supabase 
