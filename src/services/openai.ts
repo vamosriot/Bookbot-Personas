@@ -1,5 +1,5 @@
 import { OpenAIMessage, OpenAIResponse, Message, FileAttachment } from '@/types';
-import { personas, getPersonaById } from '@/config/personas';
+import { getAllPersonas, getPersonaById } from '@/config/personas';
 import { 
   CLOUDFLARE_WORKER_URL, 
   OPENAI_MODEL, 

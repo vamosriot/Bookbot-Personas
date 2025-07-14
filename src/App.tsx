@@ -8,6 +8,7 @@ import { ChatProvider } from "@/contexts/ChatContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { LoginPage } from "@/components/auth/LoginPage";
 import Index from "./pages/index";
+import MarketingLab from "./pages/MarketingLab";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 
@@ -45,6 +46,16 @@ const App = () => (
                 <ProtectedRoute>
                   <ChatProvider>
                     <Index />
+                  </ChatProvider>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/marketing-lab" 
+              element={
+                <ProtectedRoute>
+                  <ChatProvider>
+                    <MarketingLab />
                   </ChatProvider>
                 </ProtectedRoute>
               } 

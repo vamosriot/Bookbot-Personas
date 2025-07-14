@@ -1,6 +1,7 @@
 import { Persona } from '@/types';
+import { convertToRegularPersonas } from './marketing-personas';
 
-export const personas: Persona[] = [
+export const regularPersonas: Persona[] = [
   {
     id: 'pepa',
     name: 'pepa',
@@ -206,10 +207,34 @@ Your goal is to help users make informed decisions by providing thorough, accura
   }
 ];
 
+// Current personas can be either regular or marketing personas
+export let personas: Persona[] = regularPersonas;
+export let personaMode: 'regular' | 'marketing' = 'regular';
+
+// Function to switch between persona modes
+export const switchPersonaMode = (mode: 'regular' | 'marketing'): void => {
+  personaMode = mode;
+  if (mode === 'marketing') {
+    personas = convertToRegularPersonas();
+  } else {
+    personas = regularPersonas;
+  }
+};
+
+// Function to get current persona mode
+export const getCurrentPersonaMode = (): 'regular' | 'marketing' => {
+  return personaMode;
+};
+
+// Function to get all personas for current mode
+export const getAllPersonas = (): Persona[] => {
+  return personas;
+};
+
 export const getPersonaById = (id: string): Persona | undefined => {
   return personas.find(persona => persona.id === id);
 };
 
 export const getDefaultPersona = (): Persona => {
-  return personas[0]; // Return Pepa as default
+  return personas[0];
 }; 

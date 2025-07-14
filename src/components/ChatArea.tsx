@@ -7,12 +7,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useChat } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { personas } from "@/config/personas";
+import { getAllPersonas } from "@/config/personas";
 import { MessageWithFiles } from "./MessageWithFiles";
 import { FileUpload } from "./FileUpload";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { openAIService } from "@/services/openai";
-import { FileAttachment } from "@/types";
+import { FileAttachment, Persona } from "@/types";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -36,6 +36,8 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
   const [isSending, setIsSending] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  const personas = getAllPersonas();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -126,7 +128,7 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     }
   };
 
-  const handlePersonaChange = async (persona: typeof personas[0]) => {
+  const handlePersonaChange = async (persona: Persona) => {
     setSelectedPersona(persona);
     
     // Create new conversation with the selected persona

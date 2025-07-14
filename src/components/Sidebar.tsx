@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Search, Plus, MessageSquare, Settings, User, Menu, LogOut, Trash2 } from "lucide-react";
+import { Search, Plus, MessageSquare, Settings, User, Menu, LogOut, Trash2, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useChat as useChatContext } from "@/contexts/ChatContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const { signOut, user } = useAuth();
+  const navigate = useNavigate();
   
   const {
     conversations,
@@ -103,6 +105,15 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
           >
             <Plus className="h-4 w-4 mr-2" />
             New Conversation
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => navigate('/marketing-lab')}
+          >
+            <Target className="h-4 w-4 mr-2" />
+            Marketing Lab
           </Button>
         </div>
 

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { ChatContextType, Conversation, Message, Persona } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { personas, getDefaultPersona, getPersonaById } from '@/config/personas';
+import { getAllPersonas, getDefaultPersona, getPersonaById } from '@/config/personas';
 import { 
   getConversations, 
   getMessages, 

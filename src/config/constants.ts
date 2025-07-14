@@ -10,7 +10,7 @@ export const CLOUDFLARE_WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL 
 export const BASE_URL = import.meta.env.BASE_URL || '/';
 
 // OpenAI Configuration
-export const OPENAI_MODEL = 'gpt-4-turbo-preview';
+export const OPENAI_MODEL = 'gpt-4o-mini';
 export const OPENAI_MAX_TOKENS = 4096;
 export const OPENAI_TEMPERATURE = 0.7;
 
