@@ -8,7 +8,6 @@ import { MarketingTestingLab } from "@/components/MarketingTestingLab";
 import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, 
-  Settings, 
   Target, 
   MessageSquare, 
   Lightbulb,
@@ -62,8 +61,8 @@ const MarketingLab = () => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-3 max-w-md">
               <TabsTrigger value="switcher" className="flex items-center space-x-2">
-                <Settings className="h-4 w-4" />
-                <span>Mode</span>
+                <Users className="h-4 w-4" />
+                <span>Personas</span>
               </TabsTrigger>
               <TabsTrigger value="testing" className="flex items-center space-x-2">
                 <Target className="h-4 w-4" />
@@ -76,11 +75,7 @@ const MarketingLab = () => {
             </TabsList>
 
             <TabsContent value="switcher" className="space-y-6">
-              <PersonaModeSwitcher 
-                onModeChange={(mode) => {
-                  console.log('Mode changed to:', mode);
-                }}
-              />
+              <PersonaModeSwitcher />
             </TabsContent>
 
             <TabsContent value="testing" className="space-y-6">

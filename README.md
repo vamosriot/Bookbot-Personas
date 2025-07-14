@@ -1,22 +1,23 @@
 # Bookbot Personas 🤖
 
-A modern AI chatbot application featuring 5 distinct AI personas, built with React, TypeScript, and Supabase.
+A modern AI-powered marketing research tool featuring 5 customer personas for testing campaigns and validating product features, built with React, TypeScript, and Supabase.
 
 ## 🌟 Features
 
-- **5 AI Personas (Placeholders)**: Each with unique characteristics and conversation styles
-  - **Pepa**: Warm, encouraging life coach
-  - **Jarka**: Analytical, structured problem solver
-  - **Honza**: Creative, humorous storyteller
-  - **Alena**: Empathetic, supportive listener
-  - **Sofie**: Curious, exploratory knowledge seeker
+- **5 Customer Research Personas**: Each representing distinct customer segments based on market research
+  - **The Book Lover**: Avid reader, price-conscious but quality-focused
+  - **The Occasional Reader**: 2-5 books/year, trend-influenced, highly price-sensitive
+  - **The Knowledge Seeker**: Non-fiction focused, professional development needs
+  - **The Student**: Budget-constrained, textbook-focused, peer-influenced
+  - **The Parent**: Educational focus, age-appropriate content, family-oriented
 
+- **Marketing Testing Lab**: Test campaigns, features, and messaging with customer personas
 - **Complete Authentication System**: Secure login, signup, and password reset
 - **Real-time Chat**: Live conversation updates using Supabase subscriptions
 - **File Upload Support**: Drag-and-drop file attachments in conversations
 - **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui components
 - **Persistent Chat History**: All conversations saved and synchronized
-- **Multiple Conversation Management**: Switch between different AI personas
+- **Customer Segment Insights**: Detailed demographics, psychographics, and behavioral data
 
 ## 🚀 Live Demo
 
