@@ -4,18 +4,17 @@ import { Sidebar } from "@/components/Sidebar";
 import { ChatArea } from "@/components/ChatArea";
 import { PersonaModeSwitcher } from "@/components/PersonaModeSwitcher";
 import { SidebarProvider } from "@/components/ui/sidebar";
-
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users } from "lucide-react";
+import { useChat } from "@/contexts/ChatContext";
 
 const Index = () => {
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showPersonas, setShowPersonas] = useState(false);
+  const { currentConversation } = useChat();
 
   const handleShowPersonas = () => {
     setShowPersonas(true);
-    setSelectedConversation(null);
   };
 
   const handleBackToChat = () => {
@@ -26,8 +25,6 @@ const Index = () => {
     <SidebarProvider>
       <div className="flex h-screen w-full bg-background">
         <Sidebar 
-          selectedConversation={selectedConversation}
-          onSelectConversation={setSelectedConversation}
           isOpen={isSidebarOpen}
           onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
           onShowPersonas={handleShowPersonas}
@@ -79,7 +76,7 @@ const Index = () => {
           </div>
         ) : (
           <ChatArea 
-            conversationId={selectedConversation}
+            conversationId={currentConversation?.id || null}
             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           />
         )}

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useChat } from '@/contexts/ChatContext';
+import { getPersonaById } from '@/config/personas';
 import { Conversation, Message } from '@/types';
 import { 
   Menu, 
@@ -20,16 +21,12 @@ import {
 } from 'lucide-react';
 
 interface SidebarProps {
-  selectedConversation: string | null;
-  onSelectConversation: (id: string | null) => void;
   isOpen: boolean;
   onToggle: () => void;
   onShowPersonas?: () => void;
 }
 
 export function Sidebar({ 
-  selectedConversation, 
-  onSelectConversation, 
   isOpen, 
   onToggle,
   onShowPersonas 
@@ -37,7 +34,9 @@ export function Sidebar({
   const navigate = useNavigate();
   const { 
     conversations, 
+    currentConversation,
     createNewConversation, 
+    switchConversation,
     deleteConversation, 
     isLoading,
     selectedPersona 
@@ -54,18 +53,22 @@ export function Sidebar({
   const handleNewConversation = async () => {
     try {
       await createNewConversation(selectedPersona.id);
-      onSelectConversation(null); // This will trigger loading of the new conversation
     } catch (error) {
       console.error('Failed to create new conversation:', error);
+    }
+  };
+
+  const handleSelectConversation = async (conversationId: string) => {
+    try {
+      await switchConversation(conversationId);
+    } catch (error) {
+      console.error('Failed to switch conversation:', error);
     }
   };
 
   const handleDeleteConversation = async (conversationId: string) => {
     try {
       await deleteConversation(conversationId);
-      if (selectedConversation === conversationId) {
-        onSelectConversation(null);
-      }
       setShowDropdown(null);
     } catch (error) {
       console.error('Failed to delete conversation:', error);
@@ -84,6 +87,11 @@ export function Sidebar({
     } else {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
+  };
+
+  // Get persona for a specific conversation
+  const getConversationPersona = (conversation: Conversation) => {
+    return getPersonaById(conversation.persona_id) || selectedPersona;
   };
 
   // Close dropdown when clicking outside
@@ -161,86 +169,91 @@ export function Sidebar({
               </p>
             </div>
           ) : (
-            filteredConversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={`relative group rounded-lg p-3 cursor-pointer transition-all hover:bg-sidebar-accent ${
-                  selectedConversation === conversation.id
-                    ? 'bg-sidebar-accent ring-1 ring-sidebar-accent-foreground/20'
-                    : ''
-                }`}
-                onClick={() => onSelectConversation(conversation.id)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-3 flex-1 min-w-0">
-                    <Avatar className="h-8 w-8 flex-shrink-0 mt-0.5">
-                      <AvatarFallback 
-                        className="text-xs font-medium"
-                        style={{ backgroundColor: selectedPersona.color }}
-                      >
-                        {selectedPersona.avatar}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <h3 className="font-medium text-sm text-sidebar-foreground truncate">
-                          {conversation.title}
-                        </h3>
-                        <Badge variant="secondary" className="text-xs">
-                          {conversation.message_count}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>{formatDate(conversation.last_message_at)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="relative">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowDropdown(showDropdown === conversation.id ? null : conversation.id);
-                      }}
-                    >
-                      <MoreVertical className="h-3 w-3" />
-                    </Button>
-                    
-                    {showDropdown === conversation.id && (
-                      <div className="absolute right-0 top-full mt-1 w-32 bg-background border border-border rounded-md shadow-lg z-50">
-                        <div className="py-1">
-                          <button
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center space-x-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Handle edit functionality
-                              setShowDropdown(null);
-                            }}
-                          >
-                            <Edit2 className="h-3 w-3" />
-                            <span>Rename</span>
-                          </button>
-                          <button
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground text-destructive flex items-center space-x-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteConversation(conversation.id);
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            <span>Delete</span>
-                          </button>
+            filteredConversations.map((conversation) => {
+              const conversationPersona = getConversationPersona(conversation);
+              const isSelected = currentConversation?.id === conversation.id;
+              
+              return (
+                <div
+                  key={conversation.id}
+                  className={`relative group rounded-lg p-3 cursor-pointer transition-all hover:bg-sidebar-accent ${
+                    isSelected
+                      ? 'bg-sidebar-accent ring-1 ring-sidebar-accent-foreground/20'
+                      : ''
+                  }`}
+                  onClick={() => handleSelectConversation(conversation.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3 flex-1 min-w-0">
+                      <Avatar className="h-8 w-8 flex-shrink-0 mt-0.5">
+                        <AvatarFallback 
+                          className="text-xs font-medium text-white"
+                          style={{ backgroundColor: conversationPersona.color }}
+                        >
+                          {conversationPersona.avatar}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h3 className="font-medium text-sm text-sidebar-foreground truncate">
+                            {conversation.title}
+                          </h3>
+                          <Badge variant="secondary" className="text-xs">
+                            {conversation.message_count}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>{formatDate(conversation.last_message_at)}</span>
                         </div>
                       </div>
-                    )}
+                    </div>
+                    
+                    <div className="relative">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 hover:bg-accent"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowDropdown(showDropdown === conversation.id ? null : conversation.id);
+                        }}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                      
+                      {showDropdown === conversation.id && (
+                        <div className="absolute right-0 top-full mt-1 w-32 bg-background border border-border rounded-md shadow-lg z-50">
+                          <div className="py-1">
+                            <button
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center space-x-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Handle edit functionality
+                                setShowDropdown(null);
+                              }}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                              <span>Rename</span>
+                            </button>
+                            <button
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground text-destructive flex items-center space-x-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteConversation(conversation.id);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </ScrollArea>
