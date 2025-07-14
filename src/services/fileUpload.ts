@@ -24,6 +24,13 @@ export interface FileValidationResult {
   error?: string;
 }
 
+export interface FileProcessingInfo {
+  canProcessForOpenAI: boolean;
+  fileType: 'image' | 'document' | 'unsupported';
+  processingMethod: 'base64' | 'vector_store' | 'none';
+  maxDimensionsForImage?: { width: number; height: number };
+}
+
 export class FileUploadService {
   private static instance: FileUploadService;
 
@@ -73,6 +80,59 @@ export class FileUploadService {
     }
 
     return { isValid: true };
+  }
+
+  // Get file processing information for OpenAI
+  getFileProcessingInfo(file: File): FileProcessingInfo {
+    const mimeType = file.type;
+    
+    if (this.isImageFile(mimeType)) {
+      return {
+        canProcessForOpenAI: true,
+        fileType: 'image',
+        processingMethod: 'base64',
+        maxDimensionsForImage: { width: 1024, height: 1024 } // Optimize for token usage
+      };
+    } else if (this.isDocumentFile(mimeType)) {
+      return {
+        canProcessForOpenAI: true,
+        fileType: 'document',
+        processingMethod: 'vector_store'
+      };
+    } else {
+      return {
+        canProcessForOpenAI: false,
+        fileType: 'unsupported',
+        processingMethod: 'none'
+      };
+    }
+  }
+
+  // Check if file can be processed by OpenAI
+  canProcessForOpenAI(file: File): boolean {
+    return this.getFileProcessingInfo(file).canProcessForOpenAI;
+  }
+
+  // Check if file is an image that can be processed by vision models
+  isImageFile(mimeType: string): boolean {
+    return mimeType.startsWith('image/') && 
+           ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
+  }
+
+  // Check if file is a document that can be processed by file_search
+  isDocumentFile(mimeType: string): boolean {
+    const documentTypes = [
+      'application/pdf',
+      'text/plain',
+      'text/markdown',
+      'application/json',
+      'text/csv',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    return documentTypes.includes(mimeType);
   }
 
   // Single file upload
@@ -133,7 +193,7 @@ export class FileUploadService {
     }
   }
 
-  // Multiple file upload
+  // Multiple file upload with OpenAI processing validation
   async uploadFiles(
     files: File[], 
     userId: string,
@@ -147,6 +207,14 @@ export class FileUploadService {
         success: false,
         error: validation.error
       }));
+    }
+
+    // Check which files can be processed by OpenAI
+    const processableFiles = files.filter(file => this.canProcessForOpenAI(file));
+    const unprocessableFiles = files.filter(file => !this.canProcessForOpenAI(file));
+
+    if (unprocessableFiles.length > 0) {
+      console.warn('Some files cannot be processed by OpenAI:', unprocessableFiles.map(f => f.name));
     }
 
     const results: FileUploadResult[] = [];
@@ -170,6 +238,45 @@ export class FileUploadService {
     }
 
     return results;
+  }
+
+  // Get file upload and processing stats
+  getFileStats(files: File[]): {
+    total: number;
+    images: number;
+    documents: number;
+    unsupported: number;
+    totalSize: number;
+  } {
+    let images = 0;
+    let documents = 0;
+    let unsupported = 0;
+    let totalSize = 0;
+
+    files.forEach(file => {
+      const info = this.getFileProcessingInfo(file);
+      totalSize += file.size;
+      
+      switch (info.fileType) {
+        case 'image':
+          images++;
+          break;
+        case 'document':
+          documents++;
+          break;
+        case 'unsupported':
+          unsupported++;
+          break;
+      }
+    });
+
+    return {
+      total: files.length,
+      images,
+      documents,
+      unsupported,
+      totalSize
+    };
   }
 
   // Save file attachment to database

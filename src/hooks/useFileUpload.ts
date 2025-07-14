@@ -4,6 +4,16 @@ import { fileUploadService, FileUploadResult } from '@/services/fileUpload';
 import { FileAttachment, FileUploadState } from '@/types';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/config/constants';
 
+export interface FileProcessingStats {
+  total: number;
+  images: number;
+  documents: number;
+  unsupported: number;
+  totalSize: number;
+  canProcessAll: boolean;
+  processingWarnings: string[];
+}
+
 export interface UseFileUploadReturn {
   // State
   uploadState: FileUploadState;
@@ -20,6 +30,9 @@ export interface UseFileUploadReturn {
   // Utilities
   validateFile: (file: File) => boolean;
   formatFileSize: (bytes: number) => string;
+  getFileProcessingStats: () => FileProcessingStats;
+  canProcessForOpenAI: (file: File) => boolean;
+  getFileProcessingInfo: (file: File) => string;
 }
 
 export const useFileUpload = (): UseFileUploadReturn => {
@@ -49,6 +62,52 @@ export const useFileUpload = (): UseFileUploadReturn => {
     }
     return true;
   }, []);
+
+  // Check if file can be processed by OpenAI
+  const canProcessForOpenAI = useCallback((file: File): boolean => {
+    return fileUploadService.canProcessForOpenAI(file);
+  }, []);
+
+  // Get file processing information
+  const getFileProcessingInfo = useCallback((file: File): string => {
+    const info = fileUploadService.getFileProcessingInfo(file);
+    
+    if (!info.canProcessForOpenAI) {
+      return 'Cannot be processed by AI';
+    }
+    
+    if (info.fileType === 'image') {
+      return 'Will be processed as image (vision)';
+    } else if (info.fileType === 'document') {
+      return 'Will be processed as document (text search)';
+    }
+    
+    return 'Supported file';
+  }, []);
+
+  // Get processing stats for all selected files
+  const getFileProcessingStats = useCallback((): FileProcessingStats => {
+    const stats = fileUploadService.getFileStats(uploadState.files);
+    const warnings: string[] = [];
+    
+    if (stats.unsupported > 0) {
+      warnings.push(`${stats.unsupported} file${stats.unsupported > 1 ? 's' : ''} cannot be processed by AI`);
+    }
+    
+    if (stats.images > 5) {
+      warnings.push('Too many images may slow down processing');
+    }
+    
+    if (stats.totalSize > 50 * 1024 * 1024) { // 50MB
+      warnings.push('Large file sizes may slow down processing');
+    }
+    
+    return {
+      ...stats,
+      canProcessAll: stats.unsupported === 0,
+      processingWarnings: warnings
+    };
+  }, [uploadState.files]);
 
   // Select files for upload
   const selectFiles = useCallback((fileList: FileList) => {
@@ -150,39 +209,34 @@ export const useFileUpload = (): UseFileUploadReturn => {
 
       return successfulUploads;
 
-    } catch (err: any) {
-      console.error('Error uploading files:', err);
-      setError(err.message || 'Failed to upload files');
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      setError(error.message || 'Failed to upload files');
       return [];
     } finally {
       setUploadState(prev => ({ ...prev, uploading: false }));
     }
   }, [user, uploadState.files]);
 
-  // Format file size utility
+  // Format file size for display
   const formatFileSize = useCallback((bytes: number): string => {
     return fileUploadService.formatFileSize(bytes);
   }, []);
 
-  // Check if any uploads are in progress
-  const isUploading = uploadState.uploading;
-
   return {
-    // State
     uploadState,
-    isUploading,
-    error: error || uploadState.error,
-    
-    // Actions
+    isUploading: uploadState.uploading,
+    error,
     selectFiles,
     uploadFiles,
     removeFile,
     clearFiles,
     clearError,
-    
-    // Utilities
     validateFile,
-    formatFileSize
+    formatFileSize,
+    getFileProcessingStats,
+    canProcessForOpenAI,
+    getFileProcessingInfo
   };
 };
 

@@ -40,7 +40,7 @@ export class OpenAIService {
           role: 'system',
           content: persona.systemMessage
         },
-        ...this.convertMessagesToOpenAIFormat(messages)
+        ...await this.convertMessagesToOpenAIFormat(messages)
       ];
 
       // Get auth headers
@@ -104,17 +104,66 @@ export class OpenAIService {
     onError?: (error: string) => void
   ): Promise<void> {
     try {
-      // For now, we'll include file information in the message content
-      // In a full implementation, you'd process files based on their type
-      const messagesWithFiles = this.processMessagesWithFiles(messages, files);
+      // Get persona system message
+      const persona = getPersonaById(personaId);
+      if (!persona) {
+        throw new Error('Invalid persona selected');
+      }
+
+      // Process files according to type
+      const processedFiles = await this.processFiles(files);
       
-      await this.sendMessage(
-        messagesWithFiles,
-        personaId,
+      // Convert messages to OpenAI format with file handling
+      const openAIMessages: OpenAIMessage[] = [
+        {
+          role: 'system',
+          content: persona.systemMessage
+        },
+        ...await this.convertMessagesToOpenAIFormatWithFiles(messages, processedFiles)
+      ];
+
+      // Get auth headers
+      const authHeaders = await getAuthHeaders();
+
+      // Create abort controller for streaming
+      this.controller = new AbortController();
+
+      // Prepare request payload
+      const payload = {
+        model: OPENAI_MODEL, // Will use gpt-4o-mini which supports vision
+        messages: openAIMessages,
+        max_tokens: OPENAI_MAX_TOKENS,
+        temperature: OPENAI_TEMPERATURE,
+        stream: true,
+        // Add file_search tool if documents are present
+        ...(processedFiles.documents.length > 0 && {
+          tools: [{ type: "file_search" }]
+        })
+      };
+
+      // Send request to Cloudflare Worker
+      const response = await fetch(CLOUDFLARE_WORKER_URL, {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: this.controller.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // Handle streaming response
+      await this.handleStreamingResponse(
+        response,
         onChunk,
         onComplete,
         onError
       );
+
     } catch (error: any) {
       console.error('Error sending message with files:', error);
       onError?.(error.message || ERROR_MESSAGES.MESSAGE_SEND_ERROR);
@@ -179,41 +228,161 @@ export class OpenAIService {
     }
   }
 
-  private convertMessagesToOpenAIFormat(messages: Message[]): OpenAIMessage[] {
-    return messages.map(message => ({
-      role: message.role,
-      content: this.formatMessageContent(message)
-    }));
+  private async convertMessagesToOpenAIFormat(messages: Message[]): Promise<OpenAIMessage[]> {
+    const openAIMessages: OpenAIMessage[] = [];
+    
+    for (const message of messages) {
+      openAIMessages.push({
+        role: message.role,
+        content: message.content
+      });
+    }
+    
+    return openAIMessages;
+  }
+
+  private async convertMessagesToOpenAIFormatWithFiles(
+    messages: Message[], 
+    processedFiles: ProcessedFiles
+  ): Promise<OpenAIMessage[]> {
+    const openAIMessages: OpenAIMessage[] = [];
+    
+    for (const message of messages) {
+      if (message.role === 'user' && message.files && message.files.length > 0) {
+        // Find corresponding processed files for this message
+        const messageImages = processedFiles.images.filter(img => 
+          message.files?.some(f => f.id === img.originalFile.id)
+        );
+        
+        if (messageImages.length > 0) {
+          // Create message with text and images
+          const content: any[] = [
+            { type: "text", text: message.content }
+          ];
+          
+          // Add images
+          messageImages.forEach(img => {
+            content.push({
+              type: "image_url",
+              image_url: {
+                url: img.base64Data,
+                detail: "auto"
+              }
+            });
+          });
+          
+          openAIMessages.push({
+            role: message.role,
+            content: content
+          });
+        } else {
+          // No images, but might have documents - add document info to text
+          let contentText = message.content;
+          
+          const messageDocuments = processedFiles.documents.filter(doc => 
+            message.files?.some(f => f.id === doc.originalFile.id)
+          );
+          
+          if (messageDocuments.length > 0) {
+            const docInfo = messageDocuments.map(doc => 
+              `[Document: ${doc.originalFile.name} (${doc.originalFile.type})]`
+            ).join('\n');
+            contentText = `${contentText}\n\n${docInfo}`;
+          }
+          
+          openAIMessages.push({
+            role: message.role,
+            content: contentText
+          });
+        }
+      } else {
+        openAIMessages.push({
+          role: message.role,
+          content: message.content
+        });
+      }
+    }
+    
+    return openAIMessages;
+  }
+
+  private async processFiles(files: FileAttachment[]): Promise<ProcessedFiles> {
+    const images: ProcessedImage[] = [];
+    const documents: ProcessedDocument[] = [];
+    
+    for (const file of files) {
+      if (this.isImageFile(file.type)) {
+        try {
+          const base64Data = await this.convertImageToBase64(file);
+          images.push({
+            originalFile: file,
+            base64Data: base64Data
+          });
+        } catch (error) {
+          console.error(`Failed to process image ${file.name}:`, error);
+          // Continue processing other files
+        }
+      } else if (this.isDocumentFile(file.type)) {
+        // For documents, we would upload to vector store
+        // For now, we'll just mark them as processed
+        documents.push({
+          originalFile: file,
+          vectorStoreId: null // Placeholder - would contain actual vector store ID
+        });
+      }
+    }
+    
+    return { images, documents };
+  }
+
+  private async convertImageToBase64(file: FileAttachment): Promise<string> {
+    try {
+      // Fetch the image from the URL
+      const response = await fetch(file.url);
+      const blob = await response.blob();
+      
+      // Convert blob to base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error converting image to base64:', error);
+      throw new Error(`Failed to process image: ${file.name}`);
+    }
+  }
+
+  private isImageFile(mimeType: string): boolean {
+    return mimeType.startsWith('image/') && 
+           ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
+  }
+
+  private isDocumentFile(mimeType: string): boolean {
+    const documentTypes = [
+      'application/pdf',
+      'text/plain',
+      'text/markdown',
+      'application/json',
+      'text/csv',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    return documentTypes.includes(mimeType);
   }
 
   private formatMessageContent(message: Message): string {
-    let content = message.content;
-
-    // Add file information to content if files are attached
-    if (message.files && message.files.length > 0) {
-      const fileInfo = message.files.map(file => 
-        `[Attached: ${file.name} (${file.type}, ${this.formatFileSize(file.size)})]`
-      ).join('\n');
-      
-      content = `${content}\n\n${fileInfo}`;
-    }
-
-    return content;
+    return message.content;
   }
 
   private processMessagesWithFiles(messages: Message[], files: FileAttachment[]): Message[] {
-    // Add files to the last user message
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.role === 'user' && files.length > 0) {
-      return [
-        ...messages.slice(0, -1),
-        {
-          ...lastMessage,
-          files: [...(lastMessage.files || []), ...files]
-        }
-      ];
-    }
-
+    // This method is now deprecated in favor of convertMessagesToOpenAIFormatWithFiles
     return messages;
   }
 
@@ -293,6 +462,22 @@ export class OpenAIService {
 
     return contextMessages;
   }
+}
+
+// Type definitions for file processing
+interface ProcessedFiles {
+  images: ProcessedImage[];
+  documents: ProcessedDocument[];
+}
+
+interface ProcessedImage {
+  originalFile: FileAttachment;
+  base64Data: string;
+}
+
+interface ProcessedDocument {
+  originalFile: FileAttachment;
+  vectorStoreId: string | null; // Would contain vector store ID after upload
 }
 
 // Export singleton instance

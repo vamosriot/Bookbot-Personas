@@ -11,7 +11,11 @@ import {
   FileText, 
   X, 
   Loader2,
-  Paperclip 
+  Paperclip,
+  Eye,
+  AlertTriangle,
+  CheckCircle,
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -41,7 +45,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     removeFile,
     clearFiles,
     clearError,
-    formatFileSize
+    formatFileSize,
+    getFileProcessingStats,
+    canProcessForOpenAI,
+    getFileProcessingInfo
   } = useFileUpload();
 
   const { isDragOver, dragProps } = useDragAndDrop((files) => {
@@ -93,9 +100,29 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     }
   };
 
+  const getProcessingStatusIcon = (file: File) => {
+    const canProcess = canProcessForOpenAI(file);
+    const info = getFileProcessingInfo(file);
+    
+    if (canProcess) {
+      if (info.includes('image')) {
+        return <span title="Will be processed as image"><Eye className="h-3 w-3 text-green-600" /></span>;
+      } else if (info.includes('document')) {
+        return <span title="Will be processed as document"><FileText className="h-3 w-3 text-blue-600" /></span>;
+      } else {
+        return <span title="Supported file"><CheckCircle className="h-3 w-3 text-green-600" /></span>;
+      }
+    } else {
+      return <span title="Cannot be processed by AI"><AlertTriangle className="h-3 w-3 text-orange-500" /></span>;
+    }
+  };
+
   const getProgressForFile = (index: number): number => {
     return uploadState.uploadProgress[index] || 0;
   };
+
+  // Get processing stats for display
+  const processingStats = getFileProcessingStats();
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -127,7 +154,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           {isDragOver ? 'Drop files here' : 'Drag and drop files here, or click to select'}
         </p>
         <p className="text-xs text-gray-500">
-          Support for images, documents, and text files (max {maxFiles} files)
+          Support for images (vision AI) and documents (text search) - max {maxFiles} files
         </p>
       </div>
 
@@ -146,6 +173,55 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             </Button>
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Processing stats and warnings */}
+      {uploadState.files.length > 0 && (
+        <div className="space-y-2">
+          {/* Stats summary */}
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            <div className="flex items-center space-x-1">
+              <Info className="h-4 w-4" />
+              <span>
+                {processingStats.total} files
+                {processingStats.images > 0 && ` (${processingStats.images} images)`}
+                {processingStats.documents > 0 && ` (${processingStats.documents} documents)`}
+              </span>
+            </div>
+            <div className="text-xs">
+              {formatFileSize(processingStats.totalSize)}
+            </div>
+          </div>
+
+          {/* Processing warnings */}
+          {processingStats.processingWarnings.length > 0 && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  {processingStats.processingWarnings.map((warning, index) => (
+                    <div key={index} className="text-sm">
+                      • {warning}
+                    </div>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* AI processing info */}
+          {!processingStats.canProcessAll && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <div className="text-sm">
+                  <strong>AI Processing:</strong> Images will be analyzed by vision AI, documents will be processed for text search. 
+                  Files that cannot be processed will be uploaded but won't be analyzed by AI.
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
       )}
 
       {/* Selected files list */}
@@ -187,6 +263,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             {uploadState.files.map((file, index) => {
               const progress = getProgressForFile(index);
               const isFileUploading = isUploading && progress > 0;
+              const processingInfo = getFileProcessingInfo(file);
               
               return (
                 <div key={`${file.name}-${index}`} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
@@ -200,10 +277,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                       <Badge variant="secondary" className="text-xs">
                         {formatFileSize(file.size)}
                       </Badge>
+                      {getProcessingStatusIcon(file)}
+                    </div>
+                    
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-xs text-gray-500">{processingInfo}</p>
                     </div>
                     
                     {isFileUploading && (
-                      <div className="mt-1">
+                      <div className="mt-2">
                         <Progress value={progress} className="h-1" />
                         <p className="text-xs text-gray-500 mt-1">{progress}% uploaded</p>
                       </div>
