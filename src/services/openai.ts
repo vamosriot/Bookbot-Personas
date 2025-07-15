@@ -1,5 +1,7 @@
 import { OpenAIMessage, OpenAIResponse, Message, FileAttachment } from '@/types';
 import { getAllPersonas, getPersonaById } from '@/config/personas';
+import { personaMemoryService } from './personaMemory';
+import { ProcessedFileContent } from './fileUpload';
 import { 
   CLOUDFLARE_WORKER_URL, 
   OPENAI_MODEL, 
@@ -20,27 +22,42 @@ export class OpenAIService {
     return OpenAIService.instance;
   }
 
+  // Enhanced sendMessage with persona memory and file processing
   async sendMessage(
     messages: Message[],
     personaId: string,
     onChunk?: (chunk: string) => void,
     onComplete?: (fullResponse: string) => void,
-    onError?: (error: string) => void
+    onError?: (error: string) => void,
+    processedFiles?: ProcessedFileContent[]
   ): Promise<void> {
     try {
-      // Get persona system message
+      // Get persona
       const persona = getPersonaById(personaId);
       if (!persona) {
         throw new Error('Invalid persona selected');
       }
 
-      // Convert messages to OpenAI format
+      // Get conversation ID from messages
+      const conversationId = messages.length > 0 ? messages[0].conversation_id : '';
+
+      // Get or create persona memory
+      const memory = await personaMemoryService.getOrCreateMemory(conversationId, personaId);
+
+      // Generate enhanced system prompt with memory and file context
+      const enhancedSystemPrompt = personaMemoryService.generatePersonalizedSystemPrompt(
+        persona, 
+        memory, 
+        processedFiles
+      );
+
+      // Convert messages to OpenAI format with enhanced processing
       const openAIMessages: OpenAIMessage[] = [
         {
           role: 'system',
-          content: persona.systemMessage
+          content: enhancedSystemPrompt
         },
-        ...await this.convertMessagesToOpenAIFormat(messages)
+        ...await this.convertMessagesToOpenAIFormatWithEnhancements(messages, processedFiles)
       ];
 
       // Get auth headers
@@ -73,9 +90,13 @@ export class OpenAIService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Handle streaming response
-      await this.handleStreamingResponse(
+      // Handle streaming response with memory update
+      await this.handleStreamingResponseWithMemory(
         response,
+        conversationId,
+        personaId,
+        messages,
+        processedFiles,
         onChunk,
         onComplete,
         onError
@@ -95,84 +116,80 @@ export class OpenAIService {
     }
   }
 
-  async sendMessageWithFiles(
-    messages: Message[],
-    personaId: string,
-    files: FileAttachment[],
-    onChunk?: (chunk: string) => void,
-    onComplete?: (fullResponse: string) => void,
-    onError?: (error: string) => void
-  ): Promise<void> {
-    try {
-      // Get persona system message
-      const persona = getPersonaById(personaId);
-      if (!persona) {
-        throw new Error('Invalid persona selected');
+  // Enhanced message conversion with file content integration
+  private async convertMessagesToOpenAIFormatWithEnhancements(
+    messages: Message[], 
+    processedFiles?: ProcessedFileContent[]
+  ): Promise<OpenAIMessage[]> {
+    const openAIMessages: OpenAIMessage[] = [];
+
+    for (const message of messages) {
+      // Handle regular messages
+      if (!message.files || message.files.length === 0) {
+        openAIMessages.push({
+          role: message.role,
+          content: message.content
+        });
+        continue;
       }
 
-      // Process files according to type
-      const processedFiles = await this.processFiles(files);
-      
-      // Convert messages to OpenAI format with file handling
-      const openAIMessages: OpenAIMessage[] = [
+      // Handle messages with files
+      const messageContent: any[] = [
         {
-          role: 'system',
-          content: persona.systemMessage
-        },
-        ...await this.convertMessagesToOpenAIFormatWithFiles(messages, processedFiles)
+          type: 'text',
+          text: message.content
+        }
       ];
 
-      // Get auth headers
-      const authHeaders = await getAuthHeaders();
-
-      // Create abort controller for streaming
-      this.controller = new AbortController();
-
-      // Prepare request payload
-      const payload = {
-        model: OPENAI_MODEL, // Will use gpt-4o-mini which supports vision
-        messages: openAIMessages,
-        max_tokens: OPENAI_MAX_TOKENS,
-        temperature: OPENAI_TEMPERATURE,
-        stream: true,
-        // Add file_search tool if documents are present
-        ...(processedFiles.documents.length > 0 && {
-          tools: [{ type: "file_search" }]
-        })
-      };
-
-      // Send request to Cloudflare Worker
-      const response = await fetch(CLOUDFLARE_WORKER_URL, {
-        method: 'POST',
-        headers: {
-          ...authHeaders,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: this.controller.signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Add file content to the message
+      if (processedFiles && processedFiles.length > 0) {
+        for (const processedFile of processedFiles) {
+          if (processedFile.type === 'image') {
+            // Add image content for vision processing
+            try {
+              const base64Data = await this.convertImageUrlToBase64(processedFile.url);
+              messageContent.push({
+                type: 'image_url',
+                image_url: {
+                  url: base64Data,
+                  detail: 'low' // Optimize for cost
+                }
+              });
+            } catch (error) {
+              console.error('Error processing image:', error);
+            }
+          } else if (processedFile.type === 'pdf' || processedFile.type === 'text') {
+            // Add extracted text content
+            if (processedFile.content) {
+              const fileInfo = processedFile.type === 'pdf' 
+                ? `PDF Document (${processedFile.pages} pages)`
+                : 'Text Document';
+              
+              messageContent.push({
+                type: 'text',
+                text: `\n\n[${fileInfo}]:\n${processedFile.content}`
+              });
+            }
+          }
+        }
       }
 
-      // Handle streaming response
-      await this.handleStreamingResponse(
-        response,
-        onChunk,
-        onComplete,
-        onError
-      );
-
-    } catch (error: any) {
-      console.error('Error sending message with files:', error);
-      onError?.(error.message || ERROR_MESSAGES.MESSAGE_SEND_ERROR);
-      throw error;
+      openAIMessages.push({
+        role: message.role,
+        content: messageContent.length === 1 ? message.content : messageContent
+      });
     }
+    
+    return openAIMessages;
   }
 
-  private async handleStreamingResponse(
+  // Enhanced streaming response handler with memory updates
+  private async handleStreamingResponseWithMemory(
     response: Response,
+    conversationId: string,
+    personaId: string,
+    messages: Message[],
+    processedFiles?: ProcessedFileContent[],
     onChunk?: (chunk: string) => void,
     onComplete?: (fullResponse: string) => void,
     onError?: (error: string) => void
@@ -182,128 +199,77 @@ export class OpenAIService {
     let fullResponse = '';
 
     if (!reader) {
-      throw new Error('No response body reader available');
+      throw new Error('Response body is not readable');
     }
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         
-        if (done) {
-          break;
-        }
-
-        const chunk = decoder.decode(value);
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n');
-
+        
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             
             if (data === '[DONE]') {
+              // Update persona memory with complete conversation
+              await personaMemoryService.updateMemory(
+                conversationId,
+                personaId,
+                messages,
+                processedFiles
+              );
+              
               onComplete?.(fullResponse);
               return;
             }
-
+            
             try {
               const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
+              const content = parsed.choices?.[0]?.delta?.content || '';
               
               if (content) {
                 fullResponse += content;
                 onChunk?.(content);
               }
             } catch (parseError) {
-              console.warn('Failed to parse streaming chunk:', parseError);
+              // Skip invalid JSON lines
+              continue;
             }
           }
         }
       }
-
-      onComplete?.(fullResponse);
     } catch (error: any) {
       console.error('Streaming error:', error);
-      onError?.(error.message || ERROR_MESSAGES.NETWORK_ERROR);
-      throw error;
+      onError?.(error.message || 'Streaming failed');
+    } finally {
+      reader.releaseLock();
     }
   }
 
-  private async convertMessagesToOpenAIFormat(messages: Message[]): Promise<OpenAIMessage[]> {
-    const openAIMessages: OpenAIMessage[] = [];
-    
-    for (const message of messages) {
-      openAIMessages.push({
-        role: message.role,
-        content: message.content
+  // Enhanced image processing
+  private async convertImageUrlToBase64(imageUrl: string): Promise<string> {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
       });
+    } catch (error) {
+      console.error('Error converting image to base64:', error);
+      throw new Error('Failed to process image');
     }
-    
-    return openAIMessages;
-  }
-
-  private async convertMessagesToOpenAIFormatWithFiles(
-    messages: Message[], 
-    processedFiles: ProcessedFiles
-  ): Promise<OpenAIMessage[]> {
-    const openAIMessages: OpenAIMessage[] = [];
-    
-    for (const message of messages) {
-      if (message.role === 'user' && message.files && message.files.length > 0) {
-        // Find corresponding processed files for this message
-        const messageImages = processedFiles.images.filter(img => 
-          message.files?.some(f => f.id === img.originalFile.id)
-        );
-        
-        if (messageImages.length > 0) {
-          // Create message with text and images
-          const content: any[] = [
-            { type: "text", text: message.content }
-          ];
-          
-          // Add images
-          messageImages.forEach(img => {
-            content.push({
-              type: "image_url",
-              image_url: {
-                url: img.base64Data,
-                detail: "auto"
-              }
-            });
-          });
-          
-          openAIMessages.push({
-            role: message.role,
-            content: content
-          });
-        } else {
-          // No images, but might have documents - add document info to text
-          let contentText = message.content;
-          
-          const messageDocuments = processedFiles.documents.filter(doc => 
-            message.files?.some(f => f.id === doc.originalFile.id)
-          );
-          
-          if (messageDocuments.length > 0) {
-            const docInfo = messageDocuments.map(doc => 
-              `[Document: ${doc.originalFile.name} (${doc.originalFile.type})]`
-            ).join('\n');
-            contentText = `${contentText}\n\n${docInfo}`;
-          }
-          
-          openAIMessages.push({
-            role: message.role,
-            content: contentText
-          });
-        }
-      } else {
-        openAIMessages.push({
-          role: message.role,
-          content: message.content
-        });
-      }
-    }
-    
-    return openAIMessages;
   }
 
   private async processFiles(files: FileAttachment[]): Promise<ProcessedFiles> {

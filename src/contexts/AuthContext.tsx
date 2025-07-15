@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AuthContextType, User } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { AUTH_SETTINGS, ERROR_MESSAGES } from '@/config/constants';
+import { AUTH_SETTINGS, ERROR_MESSAGES, STORAGE_KEYS } from '@/config/constants';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -18,6 +19,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -110,15 +112,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       setError(null);
 
+      // Clear local storage
+      Object.values(STORAGE_KEYS).forEach(key => {
+        localStorage.removeItem(key);
+      });
+      
+      // Clear any cached conversation data
+      localStorage.removeItem('currentConversation');
+      localStorage.removeItem('selectedPersona');
+
       const { error } = await supabase.auth.signOut();
       if (error) {
-        setError(error.message || ERROR_MESSAGES.AUTH_ERROR);
-        throw error;
+        console.error('Supabase signOut error:', error);
+        // Don't throw here - we still want to clear local state and redirect
       }
+
+      // Clear local state
+      setUser(null);
+      setSession(null);
+
+      // Navigate to login page using React Router
+      navigate('/login', { replace: true });
+
     } catch (err: any) {
       console.error('Sign out error:', err);
-      setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
-      throw err;
+      // Even if there's an error, still clear local state and redirect
+      setUser(null);
+      setSession(null);
+      localStorage.clear();
+      navigate('/login', { replace: true });
     } finally {
       setIsLoading(false);
     }

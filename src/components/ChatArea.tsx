@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, Menu, ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,8 +11,10 @@ import { getAllPersonas } from "@/config/personas";
 import { MessageWithFiles } from "./MessageWithFiles";
 import { FileUpload } from "./FileUpload";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { fileUploadService, ProcessedFileContent } from '@/services/fileUpload';
 import { openAIService } from "@/services/openai";
 import { FileAttachment, Persona } from "@/types";
+import { useChat as useChatHook } from '@/hooks/useChat';
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -32,9 +34,13 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     error 
   } = useChat();
   
+  // Get delete functionality from chat hook
+  const { deleteMessage } = useChatHook();
+  
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [processedFiles, setProcessedFiles] = useState<ProcessedFileContent[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   
   const personas = getAllPersonas();
@@ -54,17 +60,31 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     setIsSending(true);
 
     try {
-      // Create the current user message object
-      const currentUserMessage = {
-        id: `temp-${Date.now()}`, // Temporary ID
-        conversation_id: currentConversation.id,
-        content: messageContent,
-        role: 'user' as const,
-        persona_id: selectedPersona.id,
-        files: pendingFiles,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+      // Process and upload files if any
+      let uploadedFiles: FileAttachment[] = [];
+      let fileProcessingResults: ProcessedFileContent[] = [];
+
+      if (pendingFiles.length > 0 && user) {
+        for (const file of pendingFiles) {
+          try {
+            const { uploadResult, processedContent } = await fileUploadService.uploadFileWithProcessing(
+              file,
+              user.id,
+              currentConversation.id
+            );
+
+            if (uploadResult.success && uploadResult.fileAttachment) {
+              uploadedFiles.push(uploadResult.fileAttachment);
+              
+              if (processedContent) {
+                fileProcessingResults.push(processedContent);
+              }
+            }
+          } catch (error) {
+            console.error('Error processing file:', error);
+          }
+        }
+      }
 
       // Add user message to database
       await addMessage({
@@ -72,20 +92,32 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
         content: messageContent,
         role: 'user',
         persona_id: selectedPersona.id,
-        files: pendingFiles
+        files: uploadedFiles
       });
 
       // Clear pending files after sending
       setPendingFiles([]);
+      setProcessedFiles([]);
 
       // Create complete message context including the current user message
+      const currentUserMessage = {
+        id: `temp-${Date.now()}`,
+        conversation_id: currentConversation.id,
+        content: messageContent,
+        role: 'user' as const,
+        persona_id: selectedPersona.id,
+        files: uploadedFiles,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
       const messagesWithCurrentUser = [...messages, currentUserMessage];
 
-      // Get AI response using OpenAI service with complete context
+      // Get AI response using enhanced OpenAI service with file processing
       let aiResponseContent = '';
       
       await openAIService.sendMessage(
-        messagesWithCurrentUser, // Pass messages including current user message
+        messagesWithCurrentUser,
         selectedPersona.id,
         (chunk: string) => {
           // Handle streaming response chunks
@@ -104,7 +136,6 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
         (error: string) => {
           // Handle error
           console.error('OpenAI API error:', error);
-          // Add fallback message
           addMessage({
             conversation_id: currentConversation.id,
             content: `I apologize, but I'm having trouble connecting to the AI service right now. Error: ${error}. Please try again later.`,
@@ -112,7 +143,8 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
             persona_id: selectedPersona.id
           });
           setIsSending(false);
-        }
+        },
+        fileProcessingResults // Pass processed file content
       );
 
     } catch (err) {
@@ -137,12 +169,20 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     }
   };
 
-  const handleFilesUploaded = (attachments: FileAttachment[]) => {
-    setPendingFiles(prev => [...prev, ...attachments]);
+  const handleFilesUploaded = (files: File[]) => {
+    setPendingFiles(prev => [...prev, ...files]);
   };
 
   const handleRemovePendingFile = (index: number) => {
     setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      await deleteMessage(messageId);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+    }
   };
 
   return (
@@ -207,6 +247,8 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
                 message={message} 
                 isOwn={message.role === 'user'}
                 showTimestamp={true}
+                onDelete={handleDeleteMessage}
+                canDelete={true}
               />
             ))
           )}
@@ -243,7 +285,7 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
         <div className="max-w-4xl mx-auto space-y-3">
           {/* File Upload Component */}
           <FileUpload 
-            onFilesUploaded={handleFilesUploaded}
+            onFilesSelected={handleFilesUploaded}
             maxFiles={5}
             disabled={isSending || isLoading}
             className="w-full"

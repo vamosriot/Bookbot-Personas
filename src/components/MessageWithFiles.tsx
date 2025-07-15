@@ -10,7 +10,8 @@ import {
   Download, 
   Eye, 
   ExternalLink,
-  Paperclip 
+  Paperclip,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fileUploadService } from '@/services/fileUpload';
@@ -20,16 +21,21 @@ interface MessageWithFilesProps {
   className?: string;
   showTimestamp?: boolean;
   isOwn?: boolean;
+  onDelete?: (messageId: string) => void;
+  canDelete?: boolean;
 }
 
 export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({ 
   message, 
   className,
   showTimestamp = true,
-  isOwn = false
+  isOwn = false,
+  onDelete,
+  canDelete = false
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [showDeleteButton, setShowDeleteButton] = useState(false);
 
   const formatFileSize = (bytes: number): string => {
     return fileUploadService.formatFileSize(bytes);
@@ -93,11 +99,35 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
   };
 
   return (
-    <div className={cn(
-      "flex flex-col space-y-2 max-w-3xl",
-      isOwn ? "items-end" : "items-start",
-      className
-    )}>
+    <div 
+      className={cn(
+        "group relative flex flex-col space-y-2 max-w-3xl",
+        isOwn ? "items-end" : "items-start",
+        className
+      )}
+      onMouseEnter={() => setShowDeleteButton(true)}
+      onMouseLeave={() => setShowDeleteButton(false)}
+      onTouchStart={() => setShowDeleteButton(true)}
+    >
+      {/* Delete button */}
+      {canDelete && onDelete && (showDeleteButton || window.innerWidth <= 768) && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(message.id)}
+          className={cn(
+            "absolute top-2 right-2 h-8 w-8 z-20 transition-all duration-200",
+            "hover:bg-red-50 hover:text-red-600 focus:opacity-100",
+            "bg-white/90 border border-gray-200 shadow-sm",
+            isOwn ? "right-2" : "right-2",
+            showDeleteButton || window.innerWidth <= 768 ? "opacity-100" : "opacity-0"
+          )}
+          aria-label="Delete message"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
+
       {/* Message content */}
       {message.content && (
         <Card className={cn(

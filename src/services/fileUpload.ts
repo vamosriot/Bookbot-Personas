@@ -1,4 +1,5 @@
 import { FileAttachment } from '@/types';
+import * as pdfParse from 'pdf-parse';
 import { 
   uploadFile, 
   getFileUrl, 
@@ -24,10 +25,18 @@ export interface FileValidationResult {
   error?: string;
 }
 
+export interface ProcessedFileContent {
+  type: 'pdf' | 'image' | 'text' | 'document';
+  content?: string;
+  pages?: number;
+  metadata?: any;
+  url: string;
+}
+
 export interface FileProcessingInfo {
   canProcessForOpenAI: boolean;
   fileType: 'image' | 'document' | 'unsupported';
-  processingMethod: 'base64' | 'vector_store' | 'none';
+  processingMethod: 'base64' | 'vector_store' | 'text_extraction' | 'none';
   maxDimensionsForImage?: { width: number; height: number };
 }
 
@@ -82,7 +91,85 @@ export class FileUploadService {
     return { isValid: true };
   }
 
-  // Get file processing information for OpenAI
+  // Enhanced PDF processing
+  async processPDFFile(file: File): Promise<ProcessedFileContent> {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const pdfData = await pdfParse(buffer);
+      
+      return {
+        type: 'pdf',
+        content: pdfData.text,
+        pages: pdfData.numpages,
+        metadata: {
+          info: pdfData.info,
+          totalPages: pdfData.numpages,
+          title: pdfData.info?.Title || file.name
+        },
+        url: '' // Will be set after upload
+      };
+    } catch (error: any) {
+      console.error('Error processing PDF:', error);
+      throw new Error(`Failed to process PDF: ${error.message}`);
+    }
+  }
+
+  // Process text file content
+  async processTextFile(file: File): Promise<ProcessedFileContent> {
+    try {
+      const text = await file.text();
+      
+      return {
+        type: 'text',
+        content: text,
+        metadata: {
+          encoding: 'utf-8',
+          size: file.size
+        },
+        url: '' // Will be set after upload
+      };
+    } catch (error: any) {
+      console.error('Error processing text file:', error);
+      throw new Error(`Failed to process text file: ${error.message}`);
+    }
+  }
+
+  // Enhanced file processing for AI
+  async processFileForAI(file: File, uploadedUrl: string): Promise<ProcessedFileContent> {
+    const mimeType = file.type;
+    
+    if (mimeType === 'application/pdf') {
+      const processed = await this.processPDFFile(file);
+      processed.url = uploadedUrl;
+      return processed;
+    } else if (mimeType.startsWith('text/')) {
+      const processed = await this.processTextFile(file);
+      processed.url = uploadedUrl;
+      return processed;
+    } else if (this.isImageFile(mimeType)) {
+      return {
+        type: 'image',
+        url: uploadedUrl,
+        metadata: {
+          type: mimeType,
+          size: file.size
+        }
+      };
+    } else {
+      return {
+        type: 'document',
+        url: uploadedUrl,
+        metadata: {
+          type: mimeType,
+          size: file.size,
+          name: file.name
+        }
+      };
+    }
+  }
+
+  // Enhanced file processing information
   getFileProcessingInfo(file: File): FileProcessingInfo {
     const mimeType = file.type;
     
@@ -91,7 +178,19 @@ export class FileUploadService {
         canProcessForOpenAI: true,
         fileType: 'image',
         processingMethod: 'base64',
-        maxDimensionsForImage: { width: 1024, height: 1024 } // Optimize for token usage
+        maxDimensionsForImage: { width: 1024, height: 1024 }
+      };
+    } else if (mimeType === 'application/pdf') {
+      return {
+        canProcessForOpenAI: true,
+        fileType: 'document',
+        processingMethod: 'text_extraction'
+      };
+    } else if (mimeType.startsWith('text/')) {
+      return {
+        canProcessForOpenAI: true,
+        fileType: 'document',
+        processingMethod: 'text_extraction'
       };
     } else if (this.isDocumentFile(mimeType)) {
       return {
@@ -238,6 +337,45 @@ export class FileUploadService {
     }
 
     return results;
+  }
+
+  // Enhanced upload with processing
+  async uploadFileWithProcessing(
+    file: File, 
+    userId: string,
+    conversationId?: string,
+    onProgress?: (progress: number) => void
+  ): Promise<{ uploadResult: FileUploadResult; processedContent?: ProcessedFileContent }> {
+    try {
+      // First upload the file
+      const uploadResult = await this.uploadFile(file, userId, conversationId, onProgress);
+      
+      if (!uploadResult.success || !uploadResult.fileAttachment) {
+        return { uploadResult };
+      }
+
+      // Then process the file content if it's supported
+      let processedContent: ProcessedFileContent | undefined;
+      
+      if (this.canProcessForOpenAI(file)) {
+        try {
+          processedContent = await this.processFileForAI(file, uploadResult.fileAttachment.url);
+        } catch (error) {
+          console.error('Error processing file for AI:', error);
+          // Don't fail the upload if processing fails
+        }
+      }
+
+      return { uploadResult, processedContent };
+    } catch (error: any) {
+      console.error('File upload with processing error:', error);
+      return {
+        uploadResult: {
+          success: false,
+          error: error.message || 'File upload failed'
+        }
+      };
+    }
   }
 
   // Get file upload and processing stats
