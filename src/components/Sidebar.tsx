@@ -209,7 +209,24 @@ export function Sidebar({
                       </div>
                     </div>
                     
-                    <div className="relative">
+                    <div className="relative flex items-center space-x-1">
+                      {/* Direct delete button - always visible on hover */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Are you sure you want to delete "${conversation.title}"? This action cannot be undone.`)) {
+                            handleDeleteConversation(conversation.id);
+                          }
+                        }}
+                        title="Delete conversation"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      
+                      {/* Three-dot menu for other actions */}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -218,6 +235,7 @@ export function Sidebar({
                           e.stopPropagation();
                           setShowDropdown(showDropdown === conversation.id ? null : conversation.id);
                         }}
+                        title="More options"
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
@@ -229,22 +247,12 @@ export function Sidebar({
                               className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center space-x-2"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Handle edit functionality
+                                // TODO: Handle edit functionality
                                 setShowDropdown(null);
                               }}
                             >
                               <Edit2 className="h-3 w-3" />
                               <span>Rename</span>
-                            </button>
-                            <button
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground text-destructive flex items-center space-x-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteConversation(conversation.id);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              <span>Delete</span>
                             </button>
                           </div>
                         </div>
