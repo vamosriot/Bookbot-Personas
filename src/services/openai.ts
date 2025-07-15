@@ -158,12 +158,10 @@ export class OpenAIService {
             } catch (error) {
               console.error('Error processing image:', error);
             }
-          } else if (processedFile.type === 'pdf' || processedFile.type === 'text') {
+          } else if (processedFile.type === 'text') {
             // Add extracted text content
             if (processedFile.content) {
-              const fileInfo = processedFile.type === 'pdf' 
-                ? `PDF Document (${processedFile.pages} pages)`
-                : 'Text Document';
+              const fileInfo = 'Text Document';
               
               messageContent.push({
                 type: 'text',
@@ -330,7 +328,6 @@ export class OpenAIService {
 
   private isDocumentFile(mimeType: string): boolean {
     const documentTypes = [
-      'application/pdf',
       'text/plain',
       'text/markdown',
       'application/json',

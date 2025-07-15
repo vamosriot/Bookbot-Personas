@@ -22,7 +22,6 @@ export const ALLOWED_FILE_TYPES = [
   'text/markdown',
   'text/csv',
   'application/json',
-  'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',

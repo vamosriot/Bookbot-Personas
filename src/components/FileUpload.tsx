@@ -133,7 +133,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         multiple
         onChange={handleFileInputChange}
         className="hidden"
-        accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
+        accept=".txt,.md,.csv,.json,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
         disabled={disabled}
       />
 

@@ -13,35 +13,6 @@ import {
   ERROR_MESSAGES 
 } from '@/config/constants';
 
-// Feature flags
-const ENABLE_PDF_PROCESSING = false; // Set to false to disable PDF processing temporarily
-
-// Dynamically import PDF.js to avoid SSR issues
-let pdfjsLib: any = null;
-let pdfInitialized = false;
-
-// Initialize PDF.js
-const initPDFJS = async () => {
-  if (!ENABLE_PDF_PROCESSING) {
-    throw new Error('PDF processing is disabled');
-  }
-  
-  if (!pdfjsLib && !pdfInitialized) {
-    try {
-      pdfInitialized = true;
-      pdfjsLib = await import('pdfjs-dist');
-      // Configure PDF.js worker
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-      console.log('PDF.js initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize PDF.js:', error);
-      pdfjsLib = null;
-      throw new Error('PDF processing not available');
-    }
-  }
-  return pdfjsLib;
-};
-
 export interface FileUploadResult {
   success: boolean;
   fileAttachment?: FileAttachment;
@@ -54,9 +25,8 @@ export interface FileValidationResult {
 }
 
 export interface ProcessedFileContent {
-  type: 'pdf' | 'image' | 'text' | 'document';
+  type: 'image' | 'text' | 'document';
   content?: string;
-  pages?: number;
   metadata?: any;
   url: string;
 }
@@ -119,84 +89,6 @@ export class FileUploadService {
     return { isValid: true };
   }
 
-  // Enhanced PDF processing using browser-compatible pdfjs-dist
-  async processPDFFile(file: File): Promise<ProcessedFileContent> {
-    try {
-      console.log('Starting PDF processing for:', file.name);
-      
-      // Initialize PDF.js
-      const pdfjs = await initPDFJS();
-      
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      
-      console.log('Loading PDF document...');
-      
-      // Load the PDF document
-      const loadingTask = pdfjs.getDocument({ data: uint8Array });
-      const pdfDocument = await loadingTask.promise;
-      
-      let fullText = '';
-      const numPages = pdfDocument.numPages;
-      
-      console.log(`PDF has ${numPages} pages, extracting text...`);
-      
-      // Extract text from each page
-      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-        try {
-          const page = await pdfDocument.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          
-          // Combine text items into a single string for this page
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(' ');
-          
-          fullText += pageText + '\n\n';
-        } catch (pageError) {
-          console.warn(`Error extracting text from page ${pageNum}:`, pageError);
-          // Continue processing other pages
-        }
-      }
-      
-      // Clean up the extracted text
-      const cleanedText = fullText
-        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-        .replace(/\n\s*\n/g, '\n\n') // Clean up multiple newlines
-        .trim();
-      
-      console.log(`Successfully extracted ${cleanedText.length} characters from PDF`);
-      
-      return {
-        type: 'pdf',
-        content: cleanedText,
-        pages: numPages,
-        metadata: {
-          totalPages: numPages,
-          title: file.name,
-          size: file.size
-        },
-        url: '' // Will be set after upload
-      };
-    } catch (error: any) {
-      console.error('Error processing PDF:', error);
-      
-      // Fallback: return basic file info without text content
-      return {
-        type: 'pdf',
-        content: `[PDF file: ${file.name} - Text extraction failed]`,
-        pages: 0,
-        metadata: {
-          totalPages: 0,
-          title: file.name,
-          size: file.size,
-          error: error.message
-        },
-        url: ''
-      };
-    }
-  }
-
   // Process text file content
   async processTextFile(file: File): Promise<ProcessedFileContent> {
     try {
@@ -221,11 +113,7 @@ export class FileUploadService {
   async processFileForAI(file: File, uploadedUrl: string): Promise<ProcessedFileContent> {
     const mimeType = file.type;
     
-    if (mimeType === 'application/pdf') {
-      const processed = await this.processPDFFile(file);
-      processed.url = uploadedUrl;
-      return processed;
-    } else if (mimeType.startsWith('text/')) {
+    if (mimeType.startsWith('text/')) {
       const processed = await this.processTextFile(file);
       processed.url = uploadedUrl;
       return processed;
@@ -262,12 +150,6 @@ export class FileUploadService {
         processingMethod: 'base64',
         maxDimensionsForImage: { width: 1024, height: 1024 }
       };
-    } else if (mimeType === 'application/pdf') {
-      return {
-        canProcessForOpenAI: true,
-        fileType: 'document',
-        processingMethod: 'text_extraction'
-      };
     } else if (mimeType.startsWith('text/')) {
       return {
         canProcessForOpenAI: true,
@@ -303,7 +185,6 @@ export class FileUploadService {
   // Check if file is a document that can be processed by file_search
   isDocumentFile(mimeType: string): boolean {
     const documentTypes = [
-      'application/pdf',
       'text/plain',
       'text/markdown',
       'application/json',
@@ -564,7 +445,6 @@ export class FileUploadService {
 
       const isImage = mimeType?.startsWith('image/') || false;
       const isDocument = [
-        'application/pdf',
         'text/plain',
         'text/markdown',
         'application/json'
@@ -646,7 +526,6 @@ export class FileUploadService {
       '.png': 'image/png',
       '.gif': 'image/gif',
       '.webp': 'image/webp',
-      '.pdf': 'application/pdf',
       '.txt': 'text/plain',
       '.md': 'text/markdown',
       '.json': 'application/json',

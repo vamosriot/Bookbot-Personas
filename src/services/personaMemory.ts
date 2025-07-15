@@ -130,9 +130,7 @@ export class PersonaMemoryService {
     // Add file context
     if (fileContext && fileContext.length > 0) {
       const fileDescriptions = fileContext.map(f => {
-        if (f.type === 'pdf') {
-          return `PDF document "${f.metadata?.title || 'Untitled'}" (${f.pages} pages) with content: ${f.content?.substring(0, 500)}...`;
-        } else if (f.type === 'text') {
+              if (f.type === 'text') {
           return `Text file with content: ${f.content?.substring(0, 300)}...`;
         } else if (f.type === 'image') {
           return `Image file that the user has shared`;
