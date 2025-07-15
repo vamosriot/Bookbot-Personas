@@ -176,15 +176,15 @@ export function Sidebar({
               return (
                 <div
                   key={conversation.id}
-                  className={`relative group rounded-lg p-3 cursor-pointer transition-all hover:bg-sidebar-accent ${
+                  className={`relative group rounded-lg p-2 cursor-pointer transition-all hover:bg-sidebar-accent ${
                     isSelected
                       ? 'bg-sidebar-accent ring-1 ring-sidebar-accent-foreground/20'
                       : ''
                   }`}
                   onClick={() => handleSelectConversation(conversation.id)}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-3 flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start space-x-3 flex-1 min-w-0 overflow-hidden">
                       <Avatar className="h-8 w-8 flex-shrink-0 mt-0.5">
                         <AvatarFallback 
                           className="text-xs font-medium text-white"
@@ -209,12 +209,12 @@ export function Sidebar({
                       </div>
                     </div>
                     
-                    <div className="relative flex items-center space-x-1">
+                    <div className="relative flex items-center space-x-1 flex-shrink-0">
                       {/* Direct delete button - always visible on hover */}
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 hover:bg-destructive hover:text-destructive-foreground"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (window.confirm(`Are you sure you want to delete "${conversation.title}"? This action cannot be undone.`)) {
@@ -223,21 +223,21 @@ export function Sidebar({
                         }}
                         title="Delete conversation"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                       
                       {/* Three-dot menu for other actions */}
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 hover:bg-accent"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 hover:bg-accent"
                         onClick={(e) => {
                           e.stopPropagation();
                           setShowDropdown(showDropdown === conversation.id ? null : conversation.id);
                         }}
                         title="More options"
                       >
-                        <MoreVertical className="h-4 w-4" />
+                        <MoreVertical className="h-3.5 w-3.5" />
                       </Button>
                       
                       {showDropdown === conversation.id && (
