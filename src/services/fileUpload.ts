@@ -1,5 +1,5 @@
 import { FileAttachment } from '@/types';
-import * as pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
 import { 
   uploadFile, 
   getFileUrl, 
@@ -13,6 +13,9 @@ import {
   STORAGE_BUCKET,
   ERROR_MESSAGES 
 } from '@/config/constants';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export interface FileUploadResult {
   success: boolean;
@@ -91,21 +94,51 @@ export class FileUploadService {
     return { isValid: true };
   }
 
-  // Enhanced PDF processing
+  // Enhanced PDF processing using browser-compatible pdfjs-dist
   async processPDFFile(file: File): Promise<ProcessedFileContent> {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const pdfData = await pdfParse(buffer);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      // Load the PDF document
+      const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+      const pdfDocument = await loadingTask.promise;
+      
+      let fullText = '';
+      const numPages = pdfDocument.numPages;
+      
+      // Extract text from each page
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        try {
+          const page = await pdfDocument.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          // Combine text items into a single string for this page
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ');
+          
+          fullText += pageText + '\n\n';
+        } catch (pageError) {
+          console.warn(`Error extracting text from page ${pageNum}:`, pageError);
+          // Continue processing other pages
+        }
+      }
+      
+      // Clean up the extracted text
+      const cleanedText = fullText
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .replace(/\n\s*\n/g, '\n\n') // Clean up multiple newlines
+        .trim();
       
       return {
         type: 'pdf',
-        content: pdfData.text,
-        pages: pdfData.numpages,
+        content: cleanedText,
+        pages: numPages,
         metadata: {
-          info: pdfData.info,
-          totalPages: pdfData.numpages,
-          title: pdfData.info?.Title || file.name
+          totalPages: numPages,
+          title: file.name,
+          size: file.size
         },
         url: '' // Will be set after upload
       };
