@@ -13,19 +13,29 @@ import {
   ERROR_MESSAGES 
 } from '@/config/constants';
 
+// Feature flags
+const ENABLE_PDF_PROCESSING = true; // Set to false to disable PDF processing temporarily
+
 // Dynamically import PDF.js to avoid SSR issues
 let pdfjsLib: any = null;
+let pdfInitialized = false;
 
 // Initialize PDF.js
 const initPDFJS = async () => {
-  if (!pdfjsLib) {
+  if (!ENABLE_PDF_PROCESSING) {
+    throw new Error('PDF processing is disabled');
+  }
+  
+  if (!pdfjsLib && !pdfInitialized) {
     try {
+      pdfInitialized = true;
       pdfjsLib = await import('pdfjs-dist');
       // Configure PDF.js worker
       pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
       console.log('PDF.js initialized successfully');
     } catch (error) {
       console.error('Failed to initialize PDF.js:', error);
+      pdfjsLib = null;
       throw new Error('PDF processing not available');
     }
   }
