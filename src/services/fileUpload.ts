@@ -14,7 +14,7 @@ import {
 } from '@/config/constants';
 
 // Feature flags
-const ENABLE_PDF_PROCESSING = true; // Set to false to disable PDF processing temporarily
+const ENABLE_PDF_PROCESSING = false; // Set to false to disable PDF processing temporarily
 
 // Dynamically import PDF.js to avoid SSR issues
 let pdfjsLib: any = null;
