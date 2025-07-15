@@ -31,12 +31,12 @@ const RouteDebugger = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AuthProvider>
-        <BrowserRouter basename={basename}>
+      <BrowserRouter basename={basename}>
+        <AuthProvider>
           <RouteDebugger />
           <Routes>
             <Route 
@@ -53,8 +53,8 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
