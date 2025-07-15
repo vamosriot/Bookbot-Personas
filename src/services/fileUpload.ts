@@ -1,5 +1,4 @@
 import { FileAttachment } from '@/types';
-import * as pdfjsLib from 'pdfjs-dist';
 import { 
   uploadFile, 
   getFileUrl, 
@@ -14,8 +13,24 @@ import {
   ERROR_MESSAGES 
 } from '@/config/constants';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Dynamically import PDF.js to avoid SSR issues
+let pdfjsLib: any = null;
+
+// Initialize PDF.js
+const initPDFJS = async () => {
+  if (!pdfjsLib) {
+    try {
+      pdfjsLib = await import('pdfjs-dist');
+      // Configure PDF.js worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+      console.log('PDF.js initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize PDF.js:', error);
+      throw new Error('PDF processing not available');
+    }
+  }
+  return pdfjsLib;
+};
 
 export interface FileUploadResult {
   success: boolean;
@@ -97,15 +112,24 @@ export class FileUploadService {
   // Enhanced PDF processing using browser-compatible pdfjs-dist
   async processPDFFile(file: File): Promise<ProcessedFileContent> {
     try {
+      console.log('Starting PDF processing for:', file.name);
+      
+      // Initialize PDF.js
+      const pdfjs = await initPDFJS();
+      
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
+      console.log('Loading PDF document...');
+      
       // Load the PDF document
-      const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+      const loadingTask = pdfjs.getDocument({ data: uint8Array });
       const pdfDocument = await loadingTask.promise;
       
       let fullText = '';
       const numPages = pdfDocument.numPages;
+      
+      console.log(`PDF has ${numPages} pages, extracting text...`);
       
       // Extract text from each page
       for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -131,6 +155,8 @@ export class FileUploadService {
         .replace(/\n\s*\n/g, '\n\n') // Clean up multiple newlines
         .trim();
       
+      console.log(`Successfully extracted ${cleanedText.length} characters from PDF`);
+      
       return {
         type: 'pdf',
         content: cleanedText,
@@ -144,7 +170,20 @@ export class FileUploadService {
       };
     } catch (error: any) {
       console.error('Error processing PDF:', error);
-      throw new Error(`Failed to process PDF: ${error.message}`);
+      
+      // Fallback: return basic file info without text content
+      return {
+        type: 'pdf',
+        content: `[PDF file: ${file.name} - Text extraction failed]`,
+        pages: 0,
+        metadata: {
+          totalPages: 0,
+          title: file.name,
+          size: file.size,
+          error: error.message
+        },
+        url: ''
+      };
     }
   }
 
