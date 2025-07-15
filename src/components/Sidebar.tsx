@@ -14,9 +14,7 @@ import {
   Search, 
   MessageSquare, 
   Users,
-  MoreVertical,
   Trash2,
-  Edit2,
   Clock
 } from 'lucide-react';
 
@@ -43,7 +41,6 @@ export function Sidebar({
   } = useChat();
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [showDropdown, setShowDropdown] = useState<string | null>(null);
 
   // Filter conversations based on search term
   const filteredConversations = conversations.filter(conversation =>
@@ -69,7 +66,6 @@ export function Sidebar({
   const handleDeleteConversation = async (conversationId: string) => {
     try {
       await deleteConversation(conversationId);
-      setShowDropdown(null);
     } catch (error) {
       console.error('Failed to delete conversation:', error);
     }
@@ -94,12 +90,7 @@ export function Sidebar({
     return getPersonaById(conversation.persona_id) || selectedPersona;
   };
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => setShowDropdown(null);
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
+
 
   if (!isOpen) {
     return (
@@ -210,11 +201,11 @@ export function Sidebar({
                     </div>
                     
                     <div className="relative flex items-center space-x-1 flex-shrink-0">
-                      {/* Direct delete button - always visible on hover */}
+                      {/* Direct delete button - always visible */}
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (window.confirm(`Are you sure you want to delete "${conversation.title}"? This action cannot be undone.`)) {
@@ -225,38 +216,7 @@ export function Sidebar({
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                      
-                      {/* Three-dot menu for other actions */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 p-0 hover:bg-accent"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowDropdown(showDropdown === conversation.id ? null : conversation.id);
-                        }}
-                        title="More options"
-                      >
-                        <MoreVertical className="h-3.5 w-3.5" />
-                      </Button>
-                      
-                      {showDropdown === conversation.id && (
-                        <div className="absolute right-0 top-full mt-1 w-32 bg-background border border-border rounded-md shadow-lg z-50">
-                          <div className="py-1">
-                            <button
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center space-x-2"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: Handle edit functionality
-                                setShowDropdown(null);
-                              }}
-                            >
-                              <Edit2 className="h-3 w-3" />
-                              <span>Rename</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
+
                     </div>
                   </div>
                 </div>
