@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { ChatContextType, Conversation, Message, Persona } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAllPersonas, getDefaultPersona, getPersonaById } from '@/config/personas';
@@ -36,18 +36,40 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Use refs to track subscriptions for proper cleanup
+  const conversationsSubscriptionRef = useRef<any>(null);
+  const messagesSubscriptionRef = useRef<any>(null);
+
   // Load user's conversations when user changes
   useEffect(() => {
     if (user) {
       loadUserConversations();
-      setupRealtimeSubscriptions();
+      setupConversationsSubscription();
     } else {
       // Clear data when user logs out
       setConversations([]);
       setCurrentConversation(null);
       setMessages([]);
+      cleanupSubscriptions();
     }
+
+    return () => {
+      cleanupSubscriptions();
+    };
   }, [user]);
+
+  // Setup message subscription when current conversation changes
+  useEffect(() => {
+    if (user && currentConversation) {
+      setupMessagesSubscription(currentConversation.id);
+    } else {
+      cleanupMessagesSubscription();
+    }
+
+    return () => {
+      cleanupMessagesSubscription();
+    };
+  }, [user, currentConversation?.id]);
 
   // Load selected persona from localStorage
   useEffect(() => {
@@ -64,6 +86,25 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SELECTED_PERSONA, selectedPersona.id);
   }, [selectedPersona]);
+
+  const cleanupSubscriptions = () => {
+    cleanupConversationsSubscription();
+    cleanupMessagesSubscription();
+  };
+
+  const cleanupConversationsSubscription = () => {
+    if (conversationsSubscriptionRef.current) {
+      conversationsSubscriptionRef.current.unsubscribe();
+      conversationsSubscriptionRef.current = null;
+    }
+  };
+
+  const cleanupMessagesSubscription = () => {
+    if (messagesSubscriptionRef.current) {
+      messagesSubscriptionRef.current.unsubscribe();
+      messagesSubscriptionRef.current = null;
+    }
+  };
 
   const loadUserConversations = async () => {
     if (!user) return;
@@ -99,35 +140,35 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
   };
 
-  const setupRealtimeSubscriptions = () => {
+  const setupConversationsSubscription = () => {
     if (!user) return;
 
+    cleanupConversationsSubscription();
+    
     // Subscribe to conversation changes
-    const conversationsSubscription = subscribeToConversations(user.id, (payload) => {
+    conversationsSubscriptionRef.current = subscribeToConversations(user.id, (payload) => {
       console.log('Conversation change:', payload);
       // Reload conversations when there are changes
       loadUserConversations();
     });
+  };
 
-    // Subscribe to message changes for current conversation
-    let messagesSubscription: any = null;
-    if (currentConversation) {
-      messagesSubscription = subscribeToMessages(currentConversation.id, (payload) => {
-        console.log('Message change:', payload);
-        if (payload.eventType === 'INSERT') {
-          setMessages(prev => [...prev, payload.new]);
-        } else if (payload.eventType === 'UPDATE') {
-          setMessages(prev => prev.map(msg => 
-            msg.id === payload.new.id ? payload.new : msg
-          ));
-        }
-      });
-    }
+  const setupMessagesSubscription = (conversationId: string) => {
+    if (!user || !conversationId) return;
 
-    return () => {
-      conversationsSubscription?.unsubscribe();
-      messagesSubscription?.unsubscribe();
-    };
+    cleanupMessagesSubscription();
+
+    // Subscribe to message changes for the specified conversation
+    messagesSubscriptionRef.current = subscribeToMessages(conversationId, (payload) => {
+      console.log('Message change:', payload);
+      if (payload.eventType === 'INSERT') {
+        setMessages(prev => [...prev, payload.new]);
+      } else if (payload.eventType === 'UPDATE') {
+        setMessages(prev => prev.map(msg => 
+          msg.id === payload.new.id ? payload.new : msg
+        ));
+      }
+    });
   };
 
   const createNewConversation = async (personaId: string) => {
@@ -176,6 +217,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       setIsLoading(true);
       setError(null);
 
+      // Clear current messages immediately to avoid showing wrong content
+      setMessages([]);
+
       // Set current conversation
       setCurrentConversation(conversation);
       
@@ -191,6 +235,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     } catch (err: any) {
       console.error('Error switching conversation:', err);
       setError(ERROR_MESSAGES.CONVERSATION_LOAD_ERROR);
+      // If there's an error, clear messages to avoid showing stale data
+      setMessages([]);
     } finally {
       setIsLoading(false);
     }
@@ -235,7 +281,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
   const loadMessages = async (conversationId: string) => {
     try {
-      setIsLoading(true);
       setError(null);
       
       const conversationMessages = await getMessages(conversationId);
@@ -244,8 +289,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     } catch (err: any) {
       console.error('Error loading messages:', err);
       setError(ERROR_MESSAGES.CONVERSATION_LOAD_ERROR);
-    } finally {
-      setIsLoading(false);
+      // Clear messages on error to avoid showing stale data
+      setMessages([]);
     }
   };
 

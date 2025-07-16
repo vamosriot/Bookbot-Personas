@@ -21,7 +21,17 @@ export interface FileAttachment {
   type: string;
   size: number;
   url: string;
+  storage_path?: string;
   uploaded_at: string;
+}
+
+export interface MessageFeedback {
+  id: string;
+  message_id: string;
+  user_id: string;
+  feedback_type: 'upvote' | 'downvote';
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Message {
@@ -31,6 +41,7 @@ export interface Message {
   role: 'user' | 'assistant';
   persona_id?: string;
   files?: FileAttachment[];
+  feedback?: MessageFeedback;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +71,38 @@ export interface ChatContextType {
   loadMessages: (conversationId: string) => Promise<void>;
   addMessage: (message: Omit<Message, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateMessage: (messageId: string, content: string) => Promise<void>;
+}
+
+// Database row interfaces for type safety
+export interface MessageRow {
+  id: string;
+  conversation_id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  persona_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FileAttachmentRow {
+  id: string;
+  message_id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  storage_path?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageFeedbackRow {
+  id: string;
+  message_id: string;
+  user_id: string;
+  feedback_type: 'upvote' | 'downvote';
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuthContextType {

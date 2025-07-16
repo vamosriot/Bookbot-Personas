@@ -15,6 +15,8 @@ import { fileUploadService, ProcessedFileContent } from '@/services/fileUpload';
 import { openAIService } from "@/services/openai";
 import { FileAttachment, Persona } from "@/types";
 import { useChat as useChatHook } from '@/hooks/useChat';
+import { createMessageFeedback, deleteMessageFeedback } from '@/lib/supabase';
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -30,12 +32,15 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     setSelectedPersona, 
     createNewConversation, 
     addMessage,
+    loadMessages,
     isLoading,
     error 
   } = useChat();
   
   // Get delete functionality from chat hook
   const { deleteMessage } = useChatHook();
+  
+  const { toast } = useToast();
   
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -185,6 +190,50 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
     }
   };
 
+  const handleMessageFeedback = async (messageId: string, feedbackType: 'upvote' | 'downvote') => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to provide feedback.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const currentMessage = messages.find(m => m.id === messageId);
+      const currentFeedback = currentMessage?.feedback;
+
+      if (currentFeedback?.feedback_type === feedbackType) {
+        // Same feedback type clicked - remove feedback
+        await deleteMessageFeedback(messageId, user.id);
+        toast({
+          title: "Feedback removed",
+          description: "Your feedback has been removed.",
+        });
+      } else {
+        // New or different feedback - create/update
+        await createMessageFeedback(messageId, user.id, feedbackType);
+        toast({
+          title: "Feedback recorded",
+          description: `Thank you for marking this response as ${feedbackType === 'upvote' ? 'helpful' : 'not helpful'}.`,
+        });
+      }
+
+      // Refresh messages to show updated feedback
+      if (currentConversation) {
+        await loadMessages(currentConversation.id);
+      }
+    } catch (error) {
+      console.error('Failed to handle feedback:', error);
+      toast({
+        title: "Feedback failed",
+        description: "There was an error processing your feedback. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-background">
       {/* Header */}
@@ -247,8 +296,7 @@ export function ChatArea({ conversationId, onToggleSidebar }: ChatAreaProps) {
                 message={message} 
                 isOwn={message.role === 'user'}
                 showTimestamp={true}
-                onDelete={handleDeleteMessage}
-                canDelete={true}
+                onFeedback={handleMessageFeedback}
               />
             ))
           )}

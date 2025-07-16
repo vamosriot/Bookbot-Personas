@@ -195,7 +195,8 @@ export const getMessages = async (conversationId: string) => {
     .from('messages')
     .select(`
       *,
-      file_attachments (*)
+      file_attachments (*),
+      message_feedback (*)
     `)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
@@ -204,7 +205,22 @@ export const getMessages = async (conversationId: string) => {
     throw error;
   }
 
-  return data;
+  // Transform the data to match our frontend types
+  const transformedMessages = data?.map(message => ({
+    ...message,
+    files: message.file_attachments?.map((attachment: any) => ({
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      url: attachment.url,
+      storage_path: attachment.storage_path,
+      uploaded_at: attachment.created_at
+    })) || [],
+    feedback: message.message_feedback?.[0] || null
+  })) || [];
+
+  return transformedMessages;
 };
 
 export const createMessage = async (message: {
@@ -374,4 +390,62 @@ export const subscribeToMessages = (conversationId: string, callback: (payload: 
       }
     )
     .subscribe();
+};
+
+// Message feedback functions
+export const createMessageFeedback = async (messageId: string, userId: string, feedbackType: 'upvote' | 'downvote') => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+
+  const { data, error } = await supabase
+    .from('message_feedback')
+    .upsert({
+      message_id: messageId,
+      user_id: userId,
+      feedback_type: feedbackType
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+};
+
+export const deleteMessageFeedback = async (messageId: string, userId: string) => {
+  if (!supabase) {
+    throw new Error('Supabase not initialized');
+  }
+
+  const { error } = await supabase
+    .from('message_feedback')
+    .delete()
+    .eq('message_id', messageId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
+};
+
+export const getMessageFeedback = async (messageId: string, userId: string) => {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('message_feedback')
+    .select('*')
+    .eq('message_id', messageId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') { // Not found error is okay
+    throw error;
+  }
+
+  return data;
 }; 
