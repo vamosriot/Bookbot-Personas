@@ -191,12 +191,64 @@ export const getMessages = async (conversationId: string) => {
     return [];
   }
   
+  // First, try with message_feedback. If it fails, fall back to without it
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select(`
+        *,
+        file_attachments (*),
+        message_feedback (*)
+      `)
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // If it's a relationship error, fall back to query without feedback
+      if (error.code === 'PGRST200' && error.message.includes('message_feedback')) {
+        console.warn('message_feedback table not found, falling back to query without feedback');
+        return getMessagesWithoutFeedback(conversationId);
+      }
+      throw error;
+    }
+
+    // Transform the data to match our frontend types
+    const transformedMessages = data?.map(message => ({
+      ...message,
+      files: message.file_attachments?.map((attachment: any) => ({
+        id: attachment.id,
+        name: attachment.name,
+        type: attachment.type,
+        size: attachment.size,
+        url: attachment.url,
+        storage_path: attachment.storage_path,
+        uploaded_at: attachment.created_at
+      })) || [],
+      feedback: message.message_feedback?.[0] || null
+    })) || [];
+
+    return transformedMessages;
+  } catch (err: any) {
+    // If it's a relationship error, fall back to query without feedback
+    if (err.code === 'PGRST200' && err.message.includes('message_feedback')) {
+      console.warn('message_feedback table not found, falling back to query without feedback');
+      return getMessagesWithoutFeedback(conversationId);
+    }
+    throw err;
+  }
+};
+
+// Fallback function for when message_feedback table doesn't exist yet
+const getMessagesWithoutFeedback = async (conversationId: string) => {
+  if (!supabase) {
+    return [];
+  }
+  
   const { data, error } = await supabase
     .from('messages')
     .select(`
       *,
-      file_attachments (*),
-      message_feedback (*)
+      file_attachments (*)
     `)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
@@ -205,7 +257,7 @@ export const getMessages = async (conversationId: string) => {
     throw error;
   }
 
-  // Transform the data to match our frontend types
+  // Transform the data to match our frontend types (without feedback)
   const transformedMessages = data?.map(message => ({
     ...message,
     files: message.file_attachments?.map((attachment: any) => ({
@@ -217,7 +269,7 @@ export const getMessages = async (conversationId: string) => {
       storage_path: attachment.storage_path,
       uploaded_at: attachment.created_at
     })) || [],
-    feedback: message.message_feedback?.[0] || null
+    feedback: null // No feedback available yet
   })) || [];
 
   return transformedMessages;
@@ -398,21 +450,35 @@ export const createMessageFeedback = async (messageId: string, userId: string, f
     throw new Error('Supabase not initialized');
   }
 
-  const { data, error } = await supabase
-    .from('message_feedback')
-    .upsert({
-      message_id: messageId,
-      user_id: userId,
-      feedback_type: feedbackType
-    })
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('message_feedback')
+      .upsert({
+        message_id: messageId,
+        user_id: userId,
+        feedback_type: feedbackType
+      })
+      .select()
+      .single();
 
-  if (error) {
-    throw error;
+    if (error) {
+      // If table doesn't exist, log and return null
+      if (error.code === 'PGRST106' || error.message.includes('message_feedback')) {
+        console.warn('message_feedback table not found - feedback feature not available yet');
+        return null;
+      }
+      throw error;
+    }
+
+    return data;
+  } catch (err: any) {
+    // If table doesn't exist, log and return null
+    if (err.code === 'PGRST106' || err.message.includes('message_feedback')) {
+      console.warn('message_feedback table not found - feedback feature not available yet');
+      return null;
+    }
+    throw err;
   }
-
-  return data;
 };
 
 export const deleteMessageFeedback = async (messageId: string, userId: string) => {
@@ -420,14 +486,28 @@ export const deleteMessageFeedback = async (messageId: string, userId: string) =
     throw new Error('Supabase not initialized');
   }
 
-  const { error } = await supabase
-    .from('message_feedback')
-    .delete()
-    .eq('message_id', messageId)
-    .eq('user_id', userId);
+  try {
+    const { error } = await supabase
+      .from('message_feedback')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('user_id', userId);
 
-  if (error) {
-    throw error;
+    if (error) {
+      // If table doesn't exist, log and return
+      if (error.code === 'PGRST106' || error.message.includes('message_feedback')) {
+        console.warn('message_feedback table not found - feedback feature not available yet');
+        return;
+      }
+      throw error;
+    }
+  } catch (err: any) {
+    // If table doesn't exist, log and return
+    if (err.code === 'PGRST106' || err.message.includes('message_feedback')) {
+      console.warn('message_feedback table not found - feedback feature not available yet');
+      return;
+    }
+    throw err;
   }
 };
 
@@ -436,16 +516,30 @@ export const getMessageFeedback = async (messageId: string, userId: string) => {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from('message_feedback')
-    .select('*')
-    .eq('message_id', messageId)
-    .eq('user_id', userId)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('message_feedback')
+      .select('*')
+      .eq('message_id', messageId)
+      .eq('user_id', userId)
+      .single();
 
-  if (error && error.code !== 'PGRST116') { // Not found error is okay
-    throw error;
+    if (error && error.code !== 'PGRST116') { // Not found error is okay
+      // If table doesn't exist, log and return null
+      if (error.code === 'PGRST106' || error.message.includes('message_feedback')) {
+        console.warn('message_feedback table not found - feedback feature not available yet');
+        return null;
+      }
+      throw error;
+    }
+
+    return data;
+  } catch (err: any) {
+    // If table doesn't exist, log and return null
+    if (err.code === 'PGRST106' || err.message.includes('message_feedback')) {
+      console.warn('message_feedback table not found - feedback feature not available yet');
+      return null;
+    }
+    throw err;
   }
-
-  return data;
 }; 
