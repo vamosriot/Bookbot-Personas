@@ -233,6 +233,7 @@ export class FileUploadService {
         type: file.type,
         size: file.size,
         url: publicUrl,
+        storage_path: fileName, // Store the file path for regenerating URLs
         uploaded_at: new Date().toISOString()
       };
 

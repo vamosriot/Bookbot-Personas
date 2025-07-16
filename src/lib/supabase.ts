@@ -305,10 +305,10 @@ export const createMessage = async (message: {
   if (message.files && message.files.length > 0) {
     const fileAttachments = message.files.map(file => ({
       message_id: data.id,
-      file_name: file.name,
-      file_type: file.type,
-      file_size: file.size,
-      file_url: file.url,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      url: file.url,
       storage_path: file.storage_path || ''
     }));
 

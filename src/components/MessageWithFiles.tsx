@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fileUploadService } from '@/services/fileUpload';
+import { getFileUrl } from '@/lib/supabase';
 
 interface MessageWithFilesProps {
   message: Message;
@@ -34,6 +35,7 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [brokenImageUrls, setBrokenImageUrls] = useState<Set<string>>(new Set());
 
   const formatFileSize = (bytes: number): string => {
     return fileUploadService.formatFileSize(bytes);
@@ -47,6 +49,19 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
     } else {
       return <File className="h-4 w-4" />;
     }
+  };
+
+  const getValidImageUrl = (file: FileAttachment): string => {
+    // If the original URL is broken and we have a storage_path, regenerate the URL
+    if (brokenImageUrls.has(file.url) && file.storage_path) {
+      return getFileUrl(file.storage_path);
+    }
+    return file.url;
+  };
+
+  const handleImageError = (file: FileAttachment) => {
+    // Mark this URL as broken
+    setBrokenImageUrls(prev => new Set(prev).add(file.url));
   };
 
   const handleFilePreview = async (fileAttachment: FileAttachment) => {
@@ -65,7 +80,7 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
 
   const handleFileDownload = (fileAttachment: FileAttachment) => {
     const link = document.createElement('a');
-    link.href = fileAttachment.url;
+    link.href = getValidImageUrl(fileAttachment);
     link.download = fileAttachment.name;
     link.target = '_blank';
     document.body.appendChild(link);
@@ -167,10 +182,11 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
                     {isImageFile(file.type) && (
                       <div className="mb-2">
                         <img 
-                          src={file.url} 
+                          src={getValidImageUrl(file)} 
                           alt={file.name}
                           className="max-w-full h-auto rounded border max-h-48 object-cover cursor-pointer"
-                          onClick={() => window.open(file.url, '_blank')}
+                          onClick={() => window.open(getValidImageUrl(file), '_blank')}
+                          onError={() => handleImageError(file)}
                         />
                       </div>
                     )}
@@ -190,7 +206,7 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(file.url, '_blank')}
+                        onClick={() => window.open(getValidImageUrl(file), '_blank')}
                         className="text-xs h-7"
                       >
                         <ExternalLink className="h-3 w-3 mr-1" />
