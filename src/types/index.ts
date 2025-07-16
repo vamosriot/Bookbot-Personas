@@ -21,7 +21,53 @@ export interface FileAttachment {
   type: string;
   size: number;
   url: string;
+  storage_path?: string;
   uploaded_at: string;
+}
+
+export interface MessageFeedback {
+  id: string;
+  message_id: string;
+  user_id: string;
+  feedback_type: 'upvote' | 'downvote';
+  feedback_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Database row types for proper type safety
+export interface FileAttachmentRow {
+  id: string;
+  message_id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  storage_path?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageFeedbackRow {
+  id: string;
+  message_id: string;
+  user_id: string;
+  feedback_type: 'upvote' | 'downvote';
+  feedback_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageRow {
+  id: string;
+  conversation_id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  persona_id?: string;
+  created_at: string;
+  updated_at: string;
+  file_attachments?: FileAttachmentRow[];
+  message_feedback?: MessageFeedbackRow[];
 }
 
 export interface Message {
@@ -31,6 +77,7 @@ export interface Message {
   role: 'user' | 'assistant';
   persona_id?: string;
   files?: FileAttachment[];
+  feedback?: MessageFeedback;
   created_at: string;
   updated_at: string;
 }

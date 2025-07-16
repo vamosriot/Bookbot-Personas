@@ -233,6 +233,7 @@ export class FileUploadService {
         type: file.type,
         size: file.size,
         url: publicUrl,
+        storage_path: fileName,
         uploaded_at: new Date().toISOString()
       };
 
