@@ -11,8 +11,7 @@ import {
   Eye, 
   ExternalLink,
   Paperclip,
-  ThumbsUp,
-  ThumbsDown
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fileUploadService } from '@/services/fileUpload';
@@ -22,7 +21,8 @@ interface MessageWithFilesProps {
   className?: string;
   showTimestamp?: boolean;
   isOwn?: boolean;
-  onFeedback?: (messageId: string, feedbackType: 'upvote' | 'downvote') => void;
+  onDelete?: (messageId: string) => void;
+  canDelete?: boolean;
 }
 
 export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({ 
@@ -30,10 +30,12 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
   className,
   showTimestamp = true,
   isOwn = false,
-  onFeedback
+  onDelete,
+  canDelete = false
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [showDeleteButton, setShowDeleteButton] = useState(false);
 
   const formatFileSize = (bytes: number): string => {
     return fileUploadService.formatFileSize(bytes);
@@ -103,7 +105,28 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
         isOwn ? "items-end" : "items-start",
         className
       )}
+      onMouseEnter={() => setShowDeleteButton(true)}
+      onMouseLeave={() => setShowDeleteButton(false)}
+      onTouchStart={() => setShowDeleteButton(true)}
     >
+      {/* Delete button */}
+      {canDelete && onDelete && (showDeleteButton || window.innerWidth <= 768) && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(message.id)}
+          className={cn(
+            "absolute top-2 right-2 h-8 w-8 z-20 transition-all duration-200",
+            "hover:bg-red-50 hover:text-red-600 focus:opacity-100",
+            "bg-white/90 border border-gray-200 shadow-sm",
+            isOwn ? "right-2" : "right-2",
+            showDeleteButton || window.innerWidth <= 768 ? "opacity-100" : "opacity-0"
+          )}
+          aria-label="Delete message"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
 
       {/* Message content */}
       {message.content && (
@@ -214,36 +237,6 @@ export const MessageWithFiles: React.FC<MessageWithFilesProps> = ({
               </CardContent>
             </Card>
           ))}
-        </div>
-      )}
-
-      {/* Feedback controls for assistant messages */}
-      {!isOwn && message.role === 'assistant' && onFeedback && (
-        <div className="flex items-center space-x-2 px-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onFeedback(message.id, 'upvote')}
-            className={cn(
-              "h-7 w-7 p-0 hover:bg-green-50 hover:text-green-600 transition-colors",
-              message.feedback?.feedback_type === 'upvote' && "bg-green-100 text-green-600"
-            )}
-            aria-label="Upvote this response"
-          >
-            <ThumbsUp className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onFeedback(message.id, 'downvote')}
-            className={cn(
-              "h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600 transition-colors",
-              message.feedback?.feedback_type === 'downvote' && "bg-red-100 text-red-600"
-            )}
-            aria-label="Downvote this response"
-          >
-            <ThumbsDown className="h-3 w-3" />
-          </Button>
         </div>
       )}
 

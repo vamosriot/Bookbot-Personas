@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Database, MessageRow, FileAttachmentRow, MessageFeedbackRow } from '@/types';
+import { Database } from '@/types';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, validateEnvironmentVariables } from '@/config/constants';
 
 // Check if Supabase credentials are available
@@ -195,8 +195,7 @@ export const getMessages = async (conversationId: string) => {
     .from('messages')
     .select(`
       *,
-      file_attachments (*),
-      message_feedback (*)
+      file_attachments (*)
     `)
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
@@ -205,36 +204,7 @@ export const getMessages = async (conversationId: string) => {
     throw error;
   }
 
-  // Map the database result to match the frontend Message interface
-  const messages = data?.map((row: MessageRow) => ({
-    id: row.id,
-    conversation_id: row.conversation_id,
-    content: row.content,
-    role: row.role,
-    persona_id: row.persona_id,
-    files: row.file_attachments?.map((attachment: FileAttachmentRow) => ({
-      id: attachment.id,
-      name: attachment.name,
-      type: attachment.type,
-      size: attachment.size,
-      url: attachment.url,
-      storage_path: attachment.storage_path,
-      uploaded_at: attachment.created_at // Map created_at to uploaded_at
-    })) || [],
-    feedback: row.message_feedback?.[0] ? {
-      id: row.message_feedback[0].id,
-      message_id: row.message_feedback[0].message_id,
-      user_id: row.message_feedback[0].user_id,
-      feedback_type: row.message_feedback[0].feedback_type,
-      feedback_reason: row.message_feedback[0].feedback_reason,
-      created_at: row.message_feedback[0].created_at,
-      updated_at: row.message_feedback[0].updated_at
-    } : undefined,
-    created_at: row.created_at,
-    updated_at: row.updated_at
-  })) || [];
-
-  return messages;
+  return data;
 };
 
 export const createMessage = async (message: {
@@ -267,10 +237,10 @@ export const createMessage = async (message: {
   if (message.files && message.files.length > 0) {
     const fileAttachments = message.files.map(file => ({
       message_id: data.id,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      url: file.url,
+      file_name: file.name,
+      file_type: file.type,
+      file_size: file.size,
+      file_url: file.url,
       storage_path: file.storage_path || ''
     }));
 
@@ -380,84 +350,6 @@ export const subscribeToConversations = (userId: string, callback: (payload: any
     .subscribe();
 };
 
-// Message feedback functions
-export const createMessageFeedback = async (
-  messageId: string,
-  feedbackType: 'upvote' | 'downvote',
-  feedbackReason?: string
-) => {
-  if (!supabase) {
-    throw new Error('Supabase not initialized');
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
-
-  const { data, error } = await supabase
-    .from('message_feedback')
-    .upsert({
-      message_id: messageId,
-      user_id: user.id,
-      feedback_type: feedbackType,
-      feedback_reason: feedbackReason
-    })
-    .select()
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  return data;
-};
-
-export const deleteMessageFeedback = async (messageId: string) => {
-  if (!supabase) {
-    throw new Error('Supabase not initialized');
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
-
-  const { error } = await supabase
-    .from('message_feedback')
-    .delete()
-    .eq('message_id', messageId)
-    .eq('user_id', user.id);
-
-  if (error) {
-    throw error;
-  }
-};
-
-export const getMessageFeedback = async (messageId: string) => {
-  if (!supabase) {
-    return null;
-  }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from('message_feedback')
-    .select('*')
-    .eq('message_id', messageId)
-    .eq('user_id', user.id)
-    .single();
-
-  if (error) {
-    return null;
-  }
-
-  return data;
-};
-
 export const subscribeToMessages = (conversationId: string, callback: (payload: any) => void) => {
   if (!supabase) {
     console.warn('Supabase not initialized - skipping subscription');
@@ -482,4 +374,4 @@ export const subscribeToMessages = (conversationId: string, callback: (payload: 
       }
     )
     .subscribe();
-};
+}; 

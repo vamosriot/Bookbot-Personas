@@ -176,36 +176,4 @@ create trigger update_persona_memories_updated_at
 drop trigger if exists update_user_profiles_updated_at on public.user_profiles;
 create trigger update_user_profiles_updated_at
   before update on public.user_profiles
-  for each row execute function update_updated_at_column();
-
--- Create message_feedback table for upvote/downvote functionality
-create table if not exists public.message_feedback (
-  id uuid default gen_random_uuid() primary key,
-  message_id uuid references public.messages(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete cascade not null,
-  feedback_type text not null check (feedback_type in ('upvote', 'downvote')),
-  feedback_reason text, -- Optional reason for feedback
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  
-  -- Ensure one feedback per user per message
-  constraint unique_user_message_feedback unique (message_id, user_id)
-);
-
--- Set up RLS for message_feedback
-alter table public.message_feedback enable row level security;
-
--- Create policies for message_feedback
-drop policy if exists "Users can only see their own feedback" on public.message_feedback;
-create policy "Users can only see their own feedback" on public.message_feedback
-  for all using (auth.uid() = user_id);
-
--- Create index for better performance
-create index if not exists idx_message_feedback_message_id on public.message_feedback(message_id);
-create index if not exists idx_message_feedback_user_id on public.message_feedback(user_id);
-
--- Create trigger for message_feedback updated_at
-drop trigger if exists update_message_feedback_updated_at on public.message_feedback;
-create trigger update_message_feedback_updated_at
-  before update on public.message_feedback
   for each row execute function update_updated_at_column(); 
