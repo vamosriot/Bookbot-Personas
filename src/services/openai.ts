@@ -2,7 +2,6 @@ import { OpenAIMessage, OpenAIResponse, Message, FileAttachment } from '@/types'
 import { getAllPersonas, getPersonaById } from '@/config/personas';
 import { personaMemoryService } from './personaMemory';
 import { ProcessedFileContent } from './fileUpload';
-import RecommendationService from './recommendationService';
 import { 
   CLOUDFLARE_WORKER_URL, 
   OPENAI_MODEL, 
@@ -10,16 +9,11 @@ import {
   OPENAI_TEMPERATURE,
   ERROR_MESSAGES 
 } from '@/config/constants';
-import { getAuthHeaders } from '@/lib/supabase';
+import { getAuthHeaders, supabase } from '@/lib/supabase';
 
 export class OpenAIService {
   private static instance: OpenAIService;
   private controller: AbortController | null = null;
-  private recommendationService: RecommendationService;
-
-  constructor() {
-    this.recommendationService = new RecommendationService();
-  }
 
   static getInstance(): OpenAIService {
     if (!OpenAIService.instance) {
@@ -28,25 +22,32 @@ export class OpenAIService {
     return OpenAIService.instance;
   }
 
-  // Search for book recommendations using the recommendation service
+  // Search for book recommendations using simple text search
   private async searchBooks(query: string, limit: number = 5): Promise<string> {
     try {
-      const response = await this.recommendationService.findSimilarBooksByTitle(
-        query,
-        limit,
-        { similarity_threshold: 0.6 }
-      );
+      // Simple text search in the books table
+      const { data: books, error } = await supabase
+        .from('books')
+        .select('id, title')
+        .or(`title.ilike.%${query}%`)
+        .is('deleted_at', null)
+        .limit(limit);
 
-      if (!response.recommendations || response.recommendations.length === 0) {
+      if (error) {
+        console.error('Supabase error:', error);
+        return "Sorry, I'm having trouble accessing the book database right now. Please try again later.";
+      }
+
+      if (!books || books.length === 0) {
         return "No books found matching your criteria. Please try a different search term.";
       }
 
       // Format the results for the AI
-      const bookList = response.recommendations.map((book, index) => 
-        `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id} (Similarity: ${(book.similarity_score * 100).toFixed(1)}%)`
+      const bookList = books.map((book: any, index) => 
+        `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id}`
       ).join('\n');
 
-      return `Found ${response.recommendations.length} relevant books:\n\n${bookList}`;
+      return `Found ${books.length} relevant books:\n\n${bookList}`;
     } catch (error) {
       console.error('Error searching books:', error);
       return "Sorry, I'm having trouble accessing the book database right now. Please try again later.";
