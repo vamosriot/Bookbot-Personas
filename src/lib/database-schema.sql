@@ -1,6 +1,9 @@
 -- Database Schema for Bookbot Personas with Enhanced Features
 -- Run this SQL in your Supabase SQL Editor
 
+-- Enable pgvector extension for embeddings
+create extension if not exists vector;
+
 -- Create conversations table
 create table if not exists public.conversations (
   id uuid default gen_random_uuid() primary key,
@@ -80,6 +83,30 @@ create table if not exists public.message_feedback (
   constraint unique_user_message_feedback unique (user_id, message_id)
 );
 
+-- Create books table for book metadata (updated for numeric IDs and CSV compatibility)
+create table if not exists public.books (
+  id serial primary key,
+  title text not null,
+  master_mother_id integer references public.books(id),
+  deleted_at timestamp with time zone,
+  merged_to integer references public.books(id),
+  great_grandmother_id integer,
+  misspelled boolean default false not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create book_embeddings table for vector similarity search
+create table if not exists public.book_embeddings (
+  id serial primary key,
+  book_id integer references public.books(id) on delete cascade not null,
+  embedding vector(1536),
+  model text not null default 'text-embedding-3-small',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(book_id, model)
+);
+
 -- Set up Row Level Security (RLS)
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
@@ -87,6 +114,8 @@ alter table public.file_attachments enable row level security;
 alter table public.persona_memories enable row level security;
 alter table public.user_profiles enable row level security;
 alter table public.message_feedback enable row level security;
+alter table public.books enable row level security;
+alter table public.book_embeddings enable row level security;
 
 -- Create policies for conversations
 drop policy if exists "Users can only see their own conversations" on public.conversations;
@@ -132,6 +161,24 @@ drop policy if exists "Users can only see their own feedback" on public.message_
 create policy "Users can only see their own feedback" on public.message_feedback
   for all using (auth.uid() = user_id);
 
+-- Create policies for books
+drop policy if exists "Anyone can read books" on public.books;
+create policy "Anyone can read books" on public.books
+  for select using (true);
+
+drop policy if exists "Service role can manage books" on public.books;
+create policy "Service role can manage books" on public.books
+  for all using (auth.jwt() ->> 'role' = 'service_role');
+
+-- Create policies for book_embeddings
+drop policy if exists "Anyone can read book embeddings" on public.book_embeddings;
+create policy "Anyone can read book embeddings" on public.book_embeddings
+  for select using (true);
+
+drop policy if exists "Service role can manage book embeddings" on public.book_embeddings;
+create policy "Service role can manage book embeddings" on public.book_embeddings
+  for all using (auth.jwt() ->> 'role' = 'service_role');
+
 -- Create storage bucket for file attachments
 insert into storage.buckets (id, name, public) 
 values ('file-attachments', 'file-attachments', true)
@@ -161,6 +208,12 @@ create index if not exists idx_messages_created_at on public.messages(created_at
 create index if not exists idx_file_attachments_message_id on public.file_attachments(message_id);
 create index if not exists idx_persona_memories_conversation_persona on public.persona_memories(conversation_id, persona_id);
 create index if not exists idx_user_profiles_user_id on public.user_profiles(user_id);
+create index if not exists idx_books_deleted_at on public.books(deleted_at);
+create index if not exists idx_books_merged_to on public.books(merged_to);
+create index if not exists idx_book_embeddings_book_id on public.book_embeddings(book_id);
+-- Use HNSW index for better performance with OpenAI embeddings
+create index if not exists idx_book_embeddings_hnsw on public.book_embeddings 
+using hnsw (embedding vector_cosine_ops) with (m = 16, ef_construction = 64);
 
 -- Create function to update updated_at timestamp
 create or replace function update_updated_at_column()
@@ -168,6 +221,41 @@ returns trigger as $$
 begin
   new.updated_at = timezone('utc'::text, now());
   return new;
+end;
+$$ language plpgsql;
+
+-- Create function for vector similarity search
+create or replace function search_similar_books(
+  query_embedding vector(1536),
+  similarity_threshold float default 0.7,
+  max_results int default 10
+)
+returns table (
+  book_id int,
+  title text,
+  master_mother_id int,
+  great_grandmother_id int,
+  misspelled boolean,
+  deleted_at timestamptz,
+  similarity_score float
+) as $$
+begin
+  return query
+  select 
+    be.book_id,
+    b.title,
+    b.master_mother_id,
+    b.great_grandmother_id,
+    b.misspelled,
+    b.deleted_at,
+    (1 - (be.embedding <=> query_embedding)) as similarity_score
+  from book_embeddings be
+  inner join books b on be.book_id = b.id
+  where be.model = 'text-embedding-3-small'
+    and b.deleted_at is null
+    and (1 - (be.embedding <=> query_embedding)) >= similarity_threshold
+  order by be.embedding <=> query_embedding
+  limit max_results;
 end;
 $$ language plpgsql;
 
@@ -200,4 +288,14 @@ create trigger update_user_profiles_updated_at
 drop trigger if exists update_message_feedback_updated_at on public.message_feedback;
 create trigger update_message_feedback_updated_at
   before update on public.message_feedback
+  for each row execute function update_updated_at_column();
+
+drop trigger if exists update_books_updated_at on public.books;
+create trigger update_books_updated_at
+  before update on public.books
+  for each row execute function update_updated_at_column();
+
+drop trigger if exists update_book_embeddings_updated_at on public.book_embeddings;
+create trigger update_book_embeddings_updated_at
+  before update on public.book_embeddings
   for each row execute function update_updated_at_column(); 

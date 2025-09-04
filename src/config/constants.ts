@@ -32,6 +32,13 @@ export const ALLOWED_FILE_TYPES = [
   'image/webp'
 ];
 
+// CSV Import Configuration
+export const IMPORT_CONFIG = {
+  BATCH_SIZE: 500,
+  MAX_CSV_FILE_SIZE: 50 * 1024 * 1024, // 50MB
+  SUPPORTED_CSV_MIME_TYPES: ['text/csv', 'application/csv', 'text/plain']
+} as const;
+
 // Supabase Storage Configuration
 export const STORAGE_BUCKET = 'file-attachments';
 export const STORAGE_URL = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}`;
@@ -40,7 +47,9 @@ export const STORAGE_URL = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_B
 export const DB_TABLES = {
   CONVERSATIONS: 'conversations',
   MESSAGES: 'messages',
-  FILE_ATTACHMENTS: 'file_attachments'
+  FILE_ATTACHMENTS: 'file_attachments',
+  BOOKS: 'books',
+  BOOK_EMBEDDINGS: 'book_embeddings'
 } as const;
 
 // Real-time Subscriptions
@@ -72,7 +81,13 @@ export const ERROR_MESSAGES = {
   TOO_MANY_FILES: `Maximum ${MAX_FILES_PER_MESSAGE} files allowed per message`,
   CONVERSATION_LOAD_ERROR: 'Failed to load conversation',
   MESSAGE_SEND_ERROR: 'Failed to send message',
-  SUPABASE_CONNECTION_ERROR: 'Database connection error'
+  SUPABASE_CONNECTION_ERROR: 'Database connection error',
+  CSV_FILE_TOO_LARGE: `CSV file size must be less than ${IMPORT_CONFIG.MAX_CSV_FILE_SIZE / (1024 * 1024)}MB`,
+  CSV_FILE_NOT_FOUND: 'CSV file not found',
+  CSV_PARSE_ERROR: 'Failed to parse CSV file',
+  CSV_INVALID_FORMAT: 'Invalid CSV format or missing required columns',
+  IMPORT_BATCH_ERROR: 'Failed to import batch of records',
+  IMPORT_VALIDATION_ERROR: 'Validation error during import'
 } as const;
 
 // Success Messages
@@ -82,7 +97,10 @@ export const SUCCESS_MESSAGES = {
   FILE_UPLOADED: 'File uploaded successfully',
   MESSAGE_SENT: 'Message sent',
   SIGNED_IN: 'Successfully signed in',
-  SIGNED_OUT: 'Successfully signed out'
+  SIGNED_OUT: 'Successfully signed out',
+  CSV_IMPORT_STARTED: 'CSV import started',
+  CSV_IMPORT_COMPLETED: 'CSV import completed successfully',
+  BATCH_IMPORTED: 'Batch imported successfully'
 } as const;
 
 // Loading States
@@ -93,7 +111,10 @@ export const LOADING_STATES = {
   SENDING_MESSAGE: 'Sending message...',
   UPLOADING_FILES: 'Uploading files...',
   SIGNING_IN: 'Signing in...',
-  SIGNING_OUT: 'Signing out...'
+  SIGNING_OUT: 'Signing out...',
+  PARSING_CSV: 'Parsing CSV file...',
+  IMPORTING_BOOKS: 'Importing books...',
+  PROCESSING_BATCH: 'Processing batch...'
 } as const;
 
 // Pagination
@@ -128,6 +149,24 @@ export const validateEnvironmentVariables = () => {
   if (missingVars.length > 0) {
     throw new Error(
       `Missing required environment variables: ${missingVars.join(', ')}`
+    );
+  }
+};
+
+// Import script environment validation
+export const validateImportEnvironmentVariables = () => {
+  const requiredVars = {
+    SUPABASE_URL: process.env.SUPABASE_URL || SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
+  };
+
+  const missingVars = Object.entries(requiredVars)
+    .filter(([_, value]) => !value)
+    .map(([key]) => key);
+
+  if (missingVars.length > 0) {
+    throw new Error(
+      `Missing required environment variables for import: ${missingVars.join(', ')}`
     );
   }
 }; 

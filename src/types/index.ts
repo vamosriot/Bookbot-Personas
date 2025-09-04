@@ -178,6 +178,107 @@ export interface FileAttachmentRow extends DatabaseRow {
   url: string;
 }
 
+// Book-related interfaces (updated for numeric IDs and CSV compatibility)
+export interface BookRow {
+  id: number;
+  title: string;
+  master_mother_id?: number;
+  deleted_at?: string;
+  merged_to?: number;
+  great_grandmother_id?: number;
+  misspelled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Book {
+  id: number;
+  title: string;
+  master_mother_id?: number;
+  deleted_at?: string;
+  merged_to?: number;
+  great_grandmother_id?: number;
+  misspelled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BookEmbeddingRow {
+  id: number;
+  book_id: number;
+  embedding?: number[];
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BookEmbedding {
+  id: number;
+  book_id: number;
+  embedding?: number[];
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// CSV import types (updated for numeric IDs and column name consistency)
+export interface BookCSVRow {
+  id?: string | number;
+  title: string;
+  master_mother_id?: string | number;
+  deleted_at?: string;
+  merged_to?: string | number;
+  great_grandmother_id?: string | number;
+  misspelled?: string | boolean; // Primary column name from CSV
+  mispelled?: string | boolean; // Handle legacy variation
+  [key: string]: any;
+}
+
+export interface ImportStats {
+  totalRecords: number;
+  successfulInserts: number;
+  successfulUpdates: number;
+  skippedRecords: number;
+  errorRecords: number;
+  errors: Array<{
+    row: number;
+    error: string;
+    data?: any;
+  }>;
+}
+
+// Recommendation system types
+export interface RecommendationResult {
+  id: number;
+  title: string;
+  similarity_score: number;
+  master_mother_id?: number;
+  great_grandmother_id?: number;
+  misspelled: boolean;
+  deleted_at?: string;
+}
+
+export interface EmbeddingGenerationProgress {
+  processed: number;
+  total: number;
+  errors: number;
+  estimatedCost: number;
+  processingTimeMs: number;
+}
+
+export interface RecommendationRequest {
+  title: string;
+  limit?: number;
+  threshold?: number;
+}
+
+export interface RecommendationResponse {
+  recommendations: RecommendationResult[];
+  query: string;
+  processing_time_ms: number;
+  total_found: number;
+}
+
 export type Json =
   | string
   | number
@@ -203,6 +304,16 @@ export interface Database {
         Row: FileAttachmentRow;
         Insert: Omit<FileAttachmentRow, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<FileAttachmentRow, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      books: {
+        Row: BookRow;
+        Insert: Omit<BookRow, 'created_at' | 'updated_at'> & { id?: number };
+        Update: Partial<Omit<BookRow, 'created_at' | 'updated_at'>>;
+      };
+      book_embeddings: {
+        Row: BookEmbeddingRow;
+        Insert: Omit<BookEmbeddingRow, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<BookEmbeddingRow, 'id' | 'created_at' | 'updated_at'>>;
       };
     };
     Views: {

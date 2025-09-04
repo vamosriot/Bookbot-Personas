@@ -1,0 +1,83 @@
+# Book Recommendations System - Environment Configuration Template
+# 
+# INSTRUCTIONS:
+# 1. Copy this file as .env in your project root
+# 2. Replace all placeholder values with your actual API keys and URLs
+# 3. Never commit the .env file to version control
+
+# =============================================================================
+# REQUIRED: OPENAI CONFIGURATION
+# =============================================================================
+# Get your API key from: https://platform.openai.com/api-keys
+# You need this to generate embeddings for book recommendations
+OPENAI_API_KEY=your_openai_api_key_here
+
+# =============================================================================
+# REQUIRED: SUPABASE CONFIGURATION  
+# =============================================================================
+# Get these from your Supabase project dashboard: https://app.supabase.com
+# All three values are needed for the recommendation system to work
+
+# Your Supabase project URL (found in project settings)
+SUPABASE_URL=https://your-project-id.supabase.co
+
+# Anon key (found in project API settings)
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your_anon_key_here
+
+# Service role key (found in project API settings - keep this secret!)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your_service_role_key_here
+
+# =============================================================================
+# OPTIONAL: API SERVER CONFIGURATION
+# =============================================================================
+# These have sensible defaults but can be customized
+
+# Port for the recommendations API server (default: 3001)
+PORT=3001
+
+# CORS origin for API requests (default: * allows all origins)
+CORS_ORIGIN=*
+
+# Environment mode (default: development)
+NODE_ENV=development
+
+# =============================================================================
+# OPTIONAL: PERFORMANCE TUNING
+# =============================================================================
+# These settings can be adjusted based on your needs and OpenAI rate limits
+
+# Batch size for embedding generation (1-100, default: 50)
+EMBEDDING_BATCH_SIZE=50
+
+# OpenAI requests per minute limit (default: 3000, max: 3500)
+OPENAI_RPM_LIMIT=3000
+
+# Similarity threshold for recommendations (0-1, default: 0.7)
+DEFAULT_SIMILARITY_THRESHOLD=0.7
+
+# Recommendation cache TTL in milliseconds (default: 5 minutes)
+CACHE_TTL_MS=300000
+
+# =============================================================================
+# COST ESTIMATION FOR YOUR REFERENCE
+# =============================================================================
+# OpenAI Embedding Costs:
+# - Model: text-embedding-3-small
+# - Price: $0.00002 per 1K tokens
+# - Average: ~10 tokens per book title
+# - Cost for 1000 books: ~$0.20
+#
+# Supabase Costs:
+# - Database storage: Very minimal for embeddings
+# - API calls: Included in free tier for moderate usage
+
+# =============================================================================
+# SETUP STEPS AFTER CONFIGURING THIS FILE
+# =============================================================================
+# 1. Copy this file to .env: cp env-template.txt .env
+# 2. Edit .env with your actual API keys
+# 3. Run database migration: Copy src/lib/database-schema.sql to Supabase SQL Editor
+# 4. Import CSV data: npm run import:books "sql (1).csv"
+# 5. Generate embeddings: npm run generate:embeddings
+# 6. Start API server: npm run api:server
+# 7. Test: curl -X POST http://localhost:3001/api/health
