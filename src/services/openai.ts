@@ -60,39 +60,27 @@ export class OpenAIService {
       }
 
       if (!books || books.length === 0) {
-        // If no results due to RLS, provide hardcoded Harry Potter books for testing
-        console.log('📚 RLS blocking results, using hardcoded Harry Potter books');
+        // If no results, try a broader search without filters
+        const { data: broadSearch, error: broadError } = await supabase
+          .from('books')
+          .select('id, title')
+          .limit(5);
+          
+        console.log('📚 Broad search (any books):', { 
+          count: broadSearch?.length || 0, 
+          error: broadError?.message,
+          sample: broadSearch?.slice(0, 3)
+        });
         
-        // Hardcoded Harry Potter books (we know these exist from earlier test)
-        const harryPotterBooks = [
-          { id: 2, title: "Harry Potter a kámen mudrců" },
-          { id: 587, title: "Harry Potter a ohnivý pohár" },
-          { id: 860, title: "Harry Potter a tajemná komnata" }
-        ];
-        
-        // Filter based on query if it contains relevant keywords
-        const relevantBooks = harryPotterBooks.filter(book => 
-          query.toLowerCase().includes('harry') || 
-          query.toLowerCase().includes('potter') || 
-          query.toLowerCase().includes('kouzeln') ||
-          query.toLowerCase().includes('magic') ||
-          query.toLowerCase().includes('fantasy')
-        );
-        
-        if (relevantBooks.length > 0) {
-          const bookList = relevantBooks.map((book, index) => 
+        if (broadSearch && broadSearch.length > 0) {
+          const sampleList = broadSearch.map((book: any, index) => 
             `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id}`
           ).join('\n');
           
-          return `Found ${relevantBooks.length} Harry Potter books (RLS bypass):\n\n${bookList}\n\n*Note: Fix RLS policies to access full database*`;
+          return `No books found for "${query}", but here are some books from the database:\n\n${sampleList}`;
         }
         
-        // If query doesn't match Harry Potter, suggest them anyway
-        const sampleList = harryPotterBooks.map((book, index) => 
-          `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id}`
-        ).join('\n');
-        
-        return `No books found for "${query}" due to RLS restrictions. Here are some popular fantasy books:\n\n${sampleList}\n\n*Note: Fix RLS policies to access full database*`;
+        return `No books found matching "${query}". Database contains ${broadSearch?.length || 0} total books.`;
       }
 
       // Format the results for the AI
