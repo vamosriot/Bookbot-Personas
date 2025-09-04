@@ -43,8 +43,12 @@ export const supabase = hasSupabaseCredentials ? createClient<Database>(
     global: {
       headers: {
         'X-Client-Info': 'bookbot-personas@1.0.0',
-        'apikey': SUPABASE_ANON_KEY
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
       }
+    },
+    db: {
+      schema: 'public'
     }
   }
 ) : null;
