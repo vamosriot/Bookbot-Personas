@@ -1,6 +1,9 @@
 /**
- * Bookbot OpenAI Proxy Worker
+ * Bookbot OpenAI Proxy Worker - GPT-5 Compatible
  * Securely proxies requests to OpenAI API with CORS support
+ * 
+ * 🚀 DEPLOY THIS TO CLOUDFLARE WORKERS
+ * This file should be deployed to: https://bookbot-openai-worker.vojtech-gryc.workers.dev/
  */
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -64,19 +67,28 @@ export default {
         });
       }
 
-      // Prepare the OpenAI request
+      // 🚀 GPT-5 Compatible Request Preparation
       const openAiRequest = {
-        model: requestBody.model || 'gpt-4o',
+        model: requestBody.model || 'gpt-4o', // Default fallback
         messages: requestBody.messages,
-        max_tokens: requestBody.max_tokens || 4096,
         temperature: requestBody.temperature || 0.7,
         stream: requestBody.stream || false,
       };
 
-      console.log('Sending request to OpenAI:', {
+      // ✅ GPT-5 Parameter Handling: Use correct parameter based on model
+      if (requestBody.model === 'gpt-5') {
+        // GPT-5 uses max_completion_tokens
+        openAiRequest.max_completion_tokens = requestBody.max_completion_tokens || requestBody.max_tokens || 8192;
+      } else {
+        // Older models use max_tokens
+        openAiRequest.max_tokens = requestBody.max_tokens || 4096;
+      }
+
+      console.log('🚀 Sending request to OpenAI:', {
         model: openAiRequest.model,
         messageCount: openAiRequest.messages.length,
-        stream: openAiRequest.stream
+        stream: openAiRequest.stream,
+        tokenParam: requestBody.model === 'gpt-5' ? 'max_completion_tokens' : 'max_tokens'
       });
 
       // Make request to OpenAI
@@ -92,10 +104,11 @@ export default {
       // Handle OpenAI API errors
       if (!openAiResponse.ok) {
         const errorData = await openAiResponse.json().catch(() => ({}));
-        console.error('OpenAI API error:', {
+        console.error('❌ OpenAI API error:', {
           status: openAiResponse.status,
           statusText: openAiResponse.statusText,
-          error: errorData
+          error: errorData,
+          model: requestBody.model
         });
 
         return new Response(JSON.stringify({
@@ -127,7 +140,7 @@ export default {
       // Handle regular responses
       const responseData = await openAiResponse.json();
       
-      console.log('OpenAI response received:', {
+      console.log('✅ OpenAI response received:', {
         id: responseData.id,
         model: responseData.model,
         usage: responseData.usage
@@ -142,7 +155,7 @@ export default {
       });
 
     } catch (error) {
-      console.error('Worker error:', error);
+      console.error('💥 Worker error:', error);
       
       return new Response(JSON.stringify({
         error: 'Internal server error',
@@ -157,4 +170,4 @@ export default {
       });
     }
   },
-}; 
+};

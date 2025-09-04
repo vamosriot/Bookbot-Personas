@@ -438,7 +438,7 @@ Remember: You're a caring parent who wants to foster your children's love of rea
     avatar: '📚🐰',
     color: '#FF8C00',
     segment: 'Book Recommendation Expert',
-    greeting: 'Zdravím! I\'m Ujo Zajko, your personal book recommendation specialist, now powered by GPT-5\'s revolutionary literary intelligence! 🚀📚 Tell me what kind of story, genre, or mood you\'re looking for, and I\'ll use advanced AI reasoning to find you the absolutely perfect books from our extensive catalog. With GPT-5, I can make deeper connections and more nuanced recommendations than ever before. What literary adventure are you craving today?',
+    greeting: 'Zdravím! I\'m Ujo Zajko, your personal book recommendation specialist, powered by advanced AI to help you discover amazing books! 🚀📚 Tell me what kind of story, genre, or mood you\'re looking for, and I\'ll use sophisticated reasoning to find you the absolutely perfect books from our extensive catalog. I can make deep literary connections and provide nuanced recommendations tailored just for you. What literary adventure are you craving today?',
     demographics: {
       ageRange: '35-55',
       gender: 'Male',
