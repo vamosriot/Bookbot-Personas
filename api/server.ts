@@ -24,7 +24,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { config } from 'dotenv';
-import RecommendationService from '../services/recommendationService.js';
+import RecommendationService from '../src/services/recommendationService.js';
 import { RecommendationRequest } from '@/types';
 
 // Load environment variables
