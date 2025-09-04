@@ -1,9 +1,11 @@
 import { getEnvironmentConfig } from './production';
 
-// Get environment-specific configuration
+// Get environment-specific configuration (automatically uses GitHub Secrets in production)
 const envConfig = getEnvironmentConfig();
 
 // Supabase Configuration (environment-aware)
+// ✅ Production: Uses GitHub Repository Secrets automatically
+// ✅ Development: Uses local .env file
 export const SUPABASE_URL = envConfig.SUPABASE_URL;
 export const SUPABASE_ANON_KEY = envConfig.SUPABASE_ANON_KEY;
 

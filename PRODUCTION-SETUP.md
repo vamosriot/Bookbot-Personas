@@ -61,18 +61,17 @@ npm run generate:embeddings
 
 ## ⚙️ **Step 2: Configure Production Environment**
 
-### 2.1 Update Production Config
-Edit `src/config/production.ts` with your production values:
+### 2.1 ✅ GitHub Secrets Already Configured!
 
-```javascript
-export const PRODUCTION_CONFIG = {
-  // 👇 Replace with your actual production values
-  SUPABASE_URL: 'https://YOUR_PROJECT_ID.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.YOUR_ANON_KEY',
-  CLOUDFLARE_WORKER_URL: 'https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev',
-  IS_PRODUCTION: window.location.hostname !== 'localhost'
-};
+**Great news!** Your repository already has the required secrets set up:
+
+```bash
+✅ VITE_SUPABASE_URL           # Your Supabase project URL  
+✅ VITE_SUPABASE_ANON_KEY      # Your Supabase anon key
+✅ VITE_CLOUDFLARE_WORKER_URL  # Your API worker URL
 ```
+
+**No manual configuration needed!** The production system automatically uses these GitHub Repository Secrets during deployment. Your `src/config/production.ts` is already configured to use them.
 
 ### 2.2 Where to Find Your Supabase Keys
 1. Go to **Project Settings** → **API**

@@ -1,16 +1,19 @@
 /**
  * Production Environment Configuration
  * This file handles production environment variables for GitHub Pages deployment
+ * 
+ * ✅ CONFIGURED: Using GitHub Repository Secrets:
+ * - VITE_SUPABASE_URL
+ * - VITE_SUPABASE_ANON_KEY  
+ * - VITE_CLOUDFLARE_WORKER_URL
  */
 
-// Production Supabase Configuration
+// Production Supabase Configuration - Uses GitHub Secrets automatically
 export const PRODUCTION_CONFIG = {
-  // Replace these with your production Supabase values
-  SUPABASE_URL: 'https://your-project-id.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-key-here',
-  
-  // API Configuration for production
-  CLOUDFLARE_WORKER_URL: 'https://your-worker.your-subdomain.workers.dev',
+  // These are automatically injected by GitHub Actions from Repository Secrets
+  SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || '',
+  SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+  CLOUDFLARE_WORKER_URL: import.meta.env.VITE_CLOUDFLARE_WORKER_URL || '',
   
   // Environment detection
   IS_PRODUCTION: window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
