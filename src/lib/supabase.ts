@@ -42,7 +42,8 @@ export const supabase = hasSupabaseCredentials ? createClient<Database>(
     },
     global: {
       headers: {
-        'X-Client-Info': 'bookbot-personas@1.0.0'
+        'X-Client-Info': 'bookbot-personas@1.0.0',
+        'apikey': SUPABASE_ANON_KEY
       }
     }
   }
