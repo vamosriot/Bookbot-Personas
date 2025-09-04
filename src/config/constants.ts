@@ -13,6 +13,15 @@ export const SUPABASE_ANON_KEY = envConfig.SUPABASE_ANON_KEY;
 export const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 export const CLOUDFLARE_WORKER_URL = envConfig.CLOUDFLARE_WORKER_URL;
 
+// Debug: Log configuration on load (remove in production)
+console.log('🔧 Configuration loaded:', {
+  hasSupabaseUrl: !!envConfig.SUPABASE_URL,
+  hasSupabaseKey: !!envConfig.SUPABASE_ANON_KEY,
+  hasWorkerUrl: !!envConfig.CLOUDFLARE_WORKER_URL,
+  workerUrl: envConfig.CLOUDFLARE_WORKER_URL,
+  openaiModel: 'gpt-5'
+});
+
 // GitHub Pages Configuration
 export const BASE_URL = import.meta.env.BASE_URL || '/';
 

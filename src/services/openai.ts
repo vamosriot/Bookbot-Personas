@@ -75,6 +75,14 @@ export class OpenAIService {
         stream: true
       };
 
+      // Debug: Log the request details
+      console.log('🚀 Sending request to Cloudflare Worker:', {
+        url: CLOUDFLARE_WORKER_URL,
+        model: payload.model,
+        messageCount: payload.messages.length,
+        hasAuthHeaders: !!authHeaders
+      });
+
       // Send request to Cloudflare Worker
       const response = await fetch(CLOUDFLARE_WORKER_URL, {
         method: 'POST',
@@ -87,7 +95,16 @@ export class OpenAIService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Enhanced error logging
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        console.error('❌ Cloudflare Worker Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorBody: errorText,
+          url: CLOUDFLARE_WORKER_URL,
+          model: payload.model
+        });
+        throw new Error(`Cloudflare Worker error! Status: ${response.status}. ${errorText}`);
       }
 
       // Handle streaming response with memory update
