@@ -25,6 +25,20 @@ export class OpenAIService {
   // Search for book recommendations using simple text search
   private async searchBooks(query: string, limit: number = 5): Promise<string> {
     try {
+      console.log('🔍 Searching books with query:', query);
+      
+      // First, let's check if there are any books at all
+      const { data: allBooks, error: countError } = await supabase
+        .from('books')
+        .select('id, title')
+        .limit(3);
+      
+      console.log('📊 Sample books check:', { 
+        count: allBooks?.length || 0, 
+        error: countError?.message,
+        sample: allBooks?.slice(0, 2)
+      });
+
       // Simple text search in the books table
       const { data: books, error } = await supabase
         .from('books')
@@ -33,13 +47,40 @@ export class OpenAIService {
         .is('deleted_at', null)
         .limit(limit);
 
+      console.log('🔍 Search results:', { 
+        query, 
+        count: books?.length || 0, 
+        error: error?.message,
+        results: books?.slice(0, 2)
+      });
+
       if (error) {
         console.error('Supabase error:', error);
-        return "Sorry, I'm having trouble accessing the book database right now. Please try again later.";
+        return `Database error: ${error.message}. Please check the console for details.`;
       }
 
       if (!books || books.length === 0) {
-        return "No books found matching your criteria. Please try a different search term.";
+        // If no results, let's try a broader search
+        const { data: broadSearch, error: broadError } = await supabase
+          .from('books')
+          .select('id, title')
+          .limit(5);
+          
+        console.log('📚 Broad search (any books):', { 
+          count: broadSearch?.length || 0, 
+          error: broadError?.message,
+          sample: broadSearch?.slice(0, 3)
+        });
+        
+        if (broadSearch && broadSearch.length > 0) {
+          const sampleList = broadSearch.map((book: any, index) => 
+            `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id}`
+          ).join('\n');
+          
+          return `No books found for "${query}", but here are some sample books from the database:\n\n${sampleList}`;
+        }
+        
+        return `No books found. Database contains ${broadSearch?.length || 0} total books.`;
       }
 
       // Format the results for the AI
@@ -50,7 +91,7 @@ export class OpenAIService {
       return `Found ${books.length} relevant books:\n\n${bookList}`;
     } catch (error) {
       console.error('Error searching books:', error);
-      return "Sorry, I'm having trouble accessing the book database right now. Please try again later.";
+      return `Search error: ${error.message}. Please check the console for details.`;
     }
   }
 
