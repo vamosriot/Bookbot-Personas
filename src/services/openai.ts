@@ -43,7 +43,7 @@ export class OpenAIService {
       const { data: books, error } = await supabase
         .from('books')
         .select('id, title')
-        .or(`title.ilike.%${query}%`)
+        .ilike('title', `%${query}%`)
         .is('deleted_at', null)
         .limit(limit);
 
