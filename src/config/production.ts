@@ -11,9 +11,10 @@
 // Production Supabase Configuration - Uses GitHub Secrets automatically
 export const PRODUCTION_CONFIG = {
   // These are automatically injected by GitHub Actions from Repository Secrets
-  SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || '',
-  SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-  CLOUDFLARE_WORKER_URL: import.meta.env.VITE_CLOUDFLARE_WORKER_URL || '',
+  // Try both VITE_ prefixed and non-prefixed versions
+  SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || '',
+  SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
+  CLOUDFLARE_WORKER_URL: import.meta.env.VITE_CLOUDFLARE_WORKER_URL || import.meta.env.CLOUDFLARE_WORKER_URL || '',
   
   // Environment detection
   IS_PRODUCTION: window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
@@ -33,8 +34,8 @@ export const getEnvironmentConfig = () => {
   
   // Development configuration (from .env)
   return {
-    SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || '',
-    SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-    CLOUDFLARE_WORKER_URL: import.meta.env.VITE_CLOUDFLARE_WORKER_URL || '',
+    SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || '',
+    SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY || '',
+    CLOUDFLARE_WORKER_URL: import.meta.env.VITE_CLOUDFLARE_WORKER_URL || import.meta.env.CLOUDFLARE_WORKER_URL || '',
   };
 };
