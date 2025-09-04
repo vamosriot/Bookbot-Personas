@@ -2,6 +2,7 @@ import { OpenAIMessage, OpenAIResponse, Message, FileAttachment } from '@/types'
 import { getAllPersonas, getPersonaById } from '@/config/personas';
 import { personaMemoryService } from './personaMemory';
 import { ProcessedFileContent } from './fileUpload';
+import RecommendationService from './recommendationService';
 import { 
   CLOUDFLARE_WORKER_URL, 
   OPENAI_MODEL, 
@@ -14,12 +15,42 @@ import { getAuthHeaders } from '@/lib/supabase';
 export class OpenAIService {
   private static instance: OpenAIService;
   private controller: AbortController | null = null;
+  private recommendationService: RecommendationService;
+
+  constructor() {
+    this.recommendationService = new RecommendationService();
+  }
 
   static getInstance(): OpenAIService {
     if (!OpenAIService.instance) {
       OpenAIService.instance = new OpenAIService();
     }
     return OpenAIService.instance;
+  }
+
+  // Search for book recommendations using the recommendation service
+  private async searchBooks(query: string, limit: number = 5): Promise<string> {
+    try {
+      const response = await this.recommendationService.findSimilarBooksByTitle(
+        query,
+        limit,
+        { similarity_threshold: 0.6 }
+      );
+
+      if (!response.recommendations || response.recommendations.length === 0) {
+        return "No books found matching your criteria. Please try a different search term.";
+      }
+
+      // Format the results for the AI
+      const bookList = response.recommendations.map((book, index) => 
+        `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id} (Similarity: ${(book.similarity_score * 100).toFixed(1)}%)`
+      ).join('\n');
+
+      return `Found ${response.recommendations.length} relevant books:\n\n${bookList}`;
+    } catch (error) {
+      console.error('Error searching books:', error);
+      return "Sorry, I'm having trouble accessing the book database right now. Please try again later.";
+    }
   }
 
   // Enhanced sendMessage with persona memory and file processing
@@ -44,12 +75,28 @@ export class OpenAIService {
       // Get or create persona memory
       const memory = await personaMemoryService.getOrCreateMemory(conversationId, personaId);
 
+      // For Ujo Zajko, automatically search for books based on the user's latest message
+      let bookSearchResults = '';
+      if (personaId === 'ujo-zajko' && messages.length > 0) {
+        const latestUserMessage = messages.filter(m => m.role === 'user').pop();
+        if (latestUserMessage) {
+          console.log('🔍 Ujo Zajko searching for books based on:', latestUserMessage.content);
+          bookSearchResults = await this.searchBooks(latestUserMessage.content);
+          console.log('📚 Book search results:', bookSearchResults);
+        }
+      }
+
       // Generate enhanced system prompt with memory and file context
-      const enhancedSystemPrompt = personaMemoryService.generatePersonalizedSystemPrompt(
+      let enhancedSystemPrompt = personaMemoryService.generatePersonalizedSystemPrompt(
         persona, 
         memory, 
         processedFiles
       );
+
+      // Add book search results for Ujo Zajko
+      if (personaId === 'ujo-zajko' && bookSearchResults) {
+        enhancedSystemPrompt += `\n\nCURRENT BOOK SEARCH RESULTS:\n${bookSearchResults}\n\nUse these exact book IDs and titles in your recommendations. Provide the knihobot.cz/g/{id} links using the IDs shown above.`;
+      }
 
       // Convert messages to OpenAI format with enhanced processing
       const openAIMessages: OpenAIMessage[] = [
