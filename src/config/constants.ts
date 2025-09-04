@@ -1,16 +1,21 @@
-// Supabase Configuration
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+import { getEnvironmentConfig } from './production';
+
+// Get environment-specific configuration
+const envConfig = getEnvironmentConfig();
+
+// Supabase Configuration (environment-aware)
+export const SUPABASE_URL = envConfig.SUPABASE_URL;
+export const SUPABASE_ANON_KEY = envConfig.SUPABASE_ANON_KEY;
 
 // API Configuration
 export const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-export const CLOUDFLARE_WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL || '';
+export const CLOUDFLARE_WORKER_URL = envConfig.CLOUDFLARE_WORKER_URL;
 
 // GitHub Pages Configuration
 export const BASE_URL = import.meta.env.BASE_URL || '/';
 
-// OpenAI Configuration
-export const OPENAI_MODEL = 'gpt-4o-mini';
+// OpenAI Configuration - Latest Models
+export const OPENAI_MODEL = 'gpt-4o'; // Upgraded from gpt-4o-mini to full gpt-4o (more powerful)
 export const OPENAI_MAX_TOKENS = 4096;
 export const OPENAI_TEMPERATURE = 0.7;
 

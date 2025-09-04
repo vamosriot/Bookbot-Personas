@@ -12,12 +12,18 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
+# Environment variables - Keep all .env files private
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+.env.txt
+*.env
+env.txt
+
+# Database files and sensitive data
+*.csv
+*.sql
+*.db
+*.sqlite
 
 # Editor directories and files
 .vscode/*
