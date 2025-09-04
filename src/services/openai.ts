@@ -72,7 +72,7 @@ export class OpenAIService {
         messages: openAIMessages,
         max_completion_tokens: OPENAI_MAX_TOKENS, // GPT-5 parameter name
         temperature: OPENAI_TEMPERATURE,
-        stream: true
+        stream: false
       };
 
       // Debug: Log the request details
@@ -107,8 +107,8 @@ export class OpenAIService {
         throw new Error(`Cloudflare Worker error! Status: ${response.status}. ${errorText}`);
       }
 
-      // Handle streaming response with memory update
-      await this.handleStreamingResponseWithMemory(
+      // Handle non-streaming response with memory update
+      await this.handleNonStreamingResponseWithMemory(
         response,
         conversationId,
         personaId,
@@ -196,6 +196,52 @@ export class OpenAIService {
     }
     
     return openAIMessages;
+  }
+
+  // Enhanced non-streaming response handler with memory updates
+  private async handleNonStreamingResponseWithMemory(
+    response: Response,
+    conversationId: string,
+    personaId: string,
+    messages: Message[],
+    processedFiles?: ProcessedFileContent[],
+    onChunk?: (chunk: string) => void,
+    onComplete?: (fullResponse: string) => void,
+    onError?: (error: string) => void
+  ): Promise<void> {
+    try {
+      const data = await response.json();
+      const fullResponse = data.choices?.[0]?.message?.content || '';
+      
+      // Simulate streaming by sending the full response as chunks
+      if (onChunk && fullResponse) {
+        // Split into words and send progressively for better UX
+        const words = fullResponse.split(' ');
+        let currentText = '';
+        
+        for (let i = 0; i < words.length; i++) {
+          currentText += (i > 0 ? ' ' : '') + words[i];
+          onChunk(words[i] + (i < words.length - 1 ? ' ' : ''));
+          
+          // Small delay to simulate streaming
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+      }
+      
+      // Update persona memory with complete conversation
+      await personaMemoryService.updateMemory(
+        conversationId,
+        personaId,
+        messages,
+        processedFiles
+      );
+      
+      onComplete?.(fullResponse);
+      
+    } catch (error: any) {
+      console.error('Non-streaming response error:', error);
+      onError?.(error.message || 'Response processing failed');
+    }
   }
 
   // Enhanced streaming response handler with memory updates

@@ -71,9 +71,16 @@ export default {
       const openAiRequest = {
         model: requestBody.model || 'gpt-4o', // Default fallback
         messages: requestBody.messages,
-        temperature: requestBody.temperature || 0.7,
         stream: requestBody.stream || false,
       };
+
+      // 🔧 Temperature handling: some models (e.g., GPT-5) only support default temperature
+      if (openAiRequest.model === 'gpt-5') {
+        // Either omit temperature or force default value 1
+        openAiRequest.temperature = 1;
+      } else {
+        openAiRequest.temperature = requestBody.temperature ?? 0.7;
+      }
 
       // ✅ GPT-5 Parameter Handling: Use correct parameter based on model
       if (requestBody.model === 'gpt-5') {
@@ -88,7 +95,8 @@ export default {
         model: openAiRequest.model,
         messageCount: openAiRequest.messages.length,
         stream: openAiRequest.stream,
-        tokenParam: requestBody.model === 'gpt-5' ? 'max_completion_tokens' : 'max_tokens'
+        tokenParam: requestBody.model === 'gpt-5' ? 'max_completion_tokens' : 'max_tokens',
+        temperature: openAiRequest.temperature
       });
 
       // Make request to OpenAI
