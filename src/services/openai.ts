@@ -27,7 +27,7 @@ export class OpenAIService {
     try {
       console.log('🔍 Searching books with query:', query);
       
-      // First, let's check if there are any books at all
+      // First, let's check if there are any books at all - no filters
       const { data: allBooks, error: countError } = await supabase
         .from('books')
         .select('id, title')
@@ -39,12 +39,11 @@ export class OpenAIService {
         sample: allBooks?.slice(0, 2)
       });
 
-      // Simple text search in the books table
+      // Simple text search in the books table - removed deleted_at filter for testing
       const { data: books, error } = await supabase
         .from('books')
         .select('id, title')
         .ilike('title', `%${query}%`)
-        .is('deleted_at', null)
         .limit(limit);
 
       console.log('🔍 Search results:', { 
