@@ -1,13 +1,30 @@
-# 🚀 Production Setup Guide
-## GitHub Pages + Supabase + OpenAI Integration
+# 🚀 Production Setup Guide - GPT-5 POWERED!
+## GitHub Pages + Supabase + OpenAI GPT-5 Integration
 
-This guide walks you through deploying your Book Recommendation System with Ujo Zajko persona to production.
+⚡ **BREAKING: Now powered by GPT-5!** ⚡
+
+This guide walks you through deploying your advanced Book Recommendation System with the GPT-5 enhanced Ujo Zajko persona to production. Experience revolutionary AI-powered book recommendations with superior reasoning and creativity!
+
+## 🎯 GPT-5 Enhanced Features
+
+### 🧠 **Revolutionary AI Improvements:**
+- **Advanced Literary Analysis** - GPT-5 understands complex themes, character arcs, and narrative structures
+- **Superior Pattern Recognition** - Makes unexpected but perfect connections between books and reader preferences  
+- **Enhanced Creativity** - Discovers hidden gems and makes innovative recommendations
+- **Deeper Context Understanding** - Better comprehension of reader mood, genre preferences, and literary tastes
+- **Improved Reasoning** - More nuanced explanations of why specific books match user preferences
+
+### 📚 **Ujo Zajko's New Powers:**
+- Leverages GPT-5's 8K+ token context for more comprehensive book analysis
+- Enhanced ability to connect disparate literary works through thematic similarities
+- More creative and engaging recommendation explanations
+- Superior understanding of Czech literary preferences and cultural context
 
 ## 📋 Prerequisites
 
 - ✅ GitHub repository set up
 - ✅ Supabase account and project
-- ✅ OpenAI API key
+- ✅ OpenAI API key (with GPT-5 access!)
 - ✅ Your book data CSV file
 
 ---

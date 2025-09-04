@@ -14,9 +14,9 @@ export const CLOUDFLARE_WORKER_URL = envConfig.CLOUDFLARE_WORKER_URL;
 // GitHub Pages Configuration
 export const BASE_URL = import.meta.env.BASE_URL || '/';
 
-// OpenAI Configuration - Latest Models
-export const OPENAI_MODEL = 'gpt-4o'; // Upgraded from gpt-4o-mini to full gpt-4o (more powerful)
-export const OPENAI_MAX_TOKENS = 4096;
+// OpenAI Configuration - Latest GPT-5 Model 🚀
+export const OPENAI_MODEL = 'gpt-5'; // BREAKING: Upgraded to GPT-5! Superior reasoning, creativity, and book understanding
+export const OPENAI_MAX_TOKENS = 8192; // GPT-5 supports larger context windows
 export const OPENAI_TEMPERATURE = 0.7;
 
 // File Upload Configuration
