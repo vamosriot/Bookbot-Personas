@@ -27,7 +27,7 @@ export const BASE_URL = import.meta.env.BASE_URL || '/';
 
 // OpenAI Configuration - Latest GPT-5 Model 🚀
 export const OPENAI_MODEL = 'gpt-5'; // BREAKING: Upgraded to GPT-5! Superior reasoning, creativity, and book understanding
-export const OPENAI_MAX_TOKENS = 8192; // GPT-5 supports larger context windows
+export const OPENAI_MAX_TOKENS = 8192; // GPT-5 uses max_completion_tokens parameter (not max_tokens)
 export const OPENAI_TEMPERATURE = 0.7;
 
 // File Upload Configuration

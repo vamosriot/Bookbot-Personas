@@ -66,11 +66,11 @@ export class OpenAIService {
       // Create abort controller for streaming
       this.controller = new AbortController();
 
-      // Prepare request payload
+      // Prepare request payload (GPT-5 uses max_completion_tokens instead of max_tokens)
       const payload = {
         model: OPENAI_MODEL,
         messages: openAIMessages,
-        max_tokens: OPENAI_MAX_TOKENS,
+        max_completion_tokens: OPENAI_MAX_TOKENS, // GPT-5 parameter name
         temperature: OPENAI_TEMPERATURE,
         stream: true
       };
