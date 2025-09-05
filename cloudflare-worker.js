@@ -54,8 +54,17 @@ export default {
       // Parse the request body
       const requestBody = await request.json();
       
+      // Debug: Log the request body to understand what's being sent
+      console.log('📥 Received request body:', {
+        action: requestBody.action,
+        hasText: !!requestBody.text,
+        hasMessages: !!requestBody.messages,
+        keys: Object.keys(requestBody)
+      });
+      
       // Handle embedding requests
       if (requestBody.action === 'embedding') {
+        console.log('🎯 Routing to embedding handler');
         return await handleEmbeddingRequest(requestBody, env);
       }
       

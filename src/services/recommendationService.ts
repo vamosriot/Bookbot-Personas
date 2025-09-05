@@ -877,21 +877,39 @@ Generate 8-10 specific book titles that match this request:`;
           
           console.log(`✅ Found ${matches.length} embedding matches for "${suggestion}"`);
         } else {
-          // Fallback to text search if embedding generation fails
-          console.log(`⚠️ Embedding failed for "${suggestion}", falling back to text search`);
-          const matches = await this.searchDatabaseForTitle(suggestion, options);
+          // Fallback to enhanced text search if embedding generation fails
+          console.log(`⚠️ Embedding failed for "${suggestion}", falling back to enhanced text search`);
           
-          matches.forEach((match, index) => {
+          // Try multiple search strategies for better results
+          let textMatches: RecommendationResult[] = [];
+          
+          // Strategy 1: Direct title search
+          textMatches = await this.searchDatabaseForTitle(suggestion, options);
+          
+          // Strategy 2: If no results, try searching by individual words
+          if (textMatches.length === 0) {
+            const words = suggestion.split(/\s+/).filter(word => word.length > 2);
+            for (const word of words) {
+              const wordMatches = await this.searchDatabaseForTitle(word, options);
+              textMatches.push(...wordMatches);
+              if (textMatches.length >= 10) break; // Limit to avoid too many results
+            }
+          }
+          
+          // Add matches with appropriate relevance scoring
+          textMatches.forEach((match, index) => {
             const suggestionIndex = suggestions.indexOf(suggestion);
             const relevanceBonus = (suggestions.length - suggestionIndex) / suggestions.length;
             
             allMatches.push({
               ...match,
-              similarity_score: Math.min(match.similarity_score + relevanceBonus * 0.2, 1.0),
+              similarity_score: Math.min(match.similarity_score * 0.8 + relevanceBonus * 0.1, 1.0),
               ai_suggestion: suggestion,
-              search_method: 'text_fallback'
+              search_method: 'text_fallback_enhanced'
             } as RecommendationResult & { ai_suggestion: string });
           });
+          
+          console.log(`📊 Enhanced text search found ${textMatches.length} matches for "${suggestion}"`);
         }
         
       } catch (error) {
@@ -940,7 +958,14 @@ Generate 8-10 specific book titles that match this request:`;
       });
 
       if (!response.ok) {
-        console.warn(`❌ Embedding generation failed: ${response.status}`);
+        const errorText = await response.text();
+        console.warn(`❌ Embedding generation failed: ${response.status}`, errorText);
+        
+        // Check if this is the "messages array required" error - indicates old worker version
+        if (errorText.includes('messages array is required')) {
+          console.warn('🔄 Cloudflare Worker needs to be updated with embedding support');
+        }
+        
         return null;
       }
 
