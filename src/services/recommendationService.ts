@@ -903,14 +903,32 @@ Generate 8-10 specific book titles that match this request:`;
       const escapedTitle = title.replace(/[%_]/g, '\\$&');
       const firstWord = title.split(' ')[0].replace(/[%_]/g, '\\$&');
       
-      // Try multiple search strategies
+      // Try multiple search strategies with increasing flexibility
+      const words = escapedTitle.split(' ').filter(word => word.length > 2);
       const searchStrategies = [
         // Exact title match
-        { field: 'title', operator: 'ilike', value: `%${escapedTitle}%` },
+        { field: 'title', operator: 'ilike', value: `%${escapedTitle}%`, description: 'exact_title' },
         // First word match
-        { field: 'title', operator: 'ilike', value: `%${firstWord}%` },
-        // Author name search (for cases like "Mornštajnová")
-        { field: 'title', operator: 'ilike', value: `%${escapedTitle.split(' ').pop()}%` }
+        { field: 'title', operator: 'ilike', value: `%${firstWord}%`, description: 'first_word' },
+        // Each significant word individually
+        ...words.map(word => ({ 
+          field: 'title', 
+          operator: 'ilike', 
+          value: `%${word}%`, 
+          description: `word_${word}` 
+        })),
+        // Common variations for popular books
+        ...(title.toLowerCase().includes('harry potter') ? [
+          { field: 'title', operator: 'ilike', value: '%harry%potter%', description: 'harry_potter_variation' },
+          { field: 'title', operator: 'ilike', value: '%potter%', description: 'potter_only' }
+        ] : []),
+        ...(title.toLowerCase().includes('hobit') ? [
+          { field: 'title', operator: 'ilike', value: '%hobbit%', description: 'hobbit_english' }
+        ] : []),
+        ...(title.toLowerCase().includes('pán prstenů') ? [
+          { field: 'title', operator: 'ilike', value: '%lord%rings%', description: 'lotr_english' },
+          { field: 'title', operator: 'ilike', value: '%prstenů%', description: 'rings_czech' }
+        ] : [])
       ];
 
       let allResults: any[] = [];
@@ -935,8 +953,11 @@ Generate 8-10 specific book titles that match this request:`;
           const { data, error } = await supabaseQuery;
 
           if (!error && data && data.length > 0) {
-            console.log(`✅ Found ${data.length} results with strategy:`, strategy);
+            console.log(`✅ Found ${data.length} results with strategy:`, strategy.description, 'Query:', strategy.value);
+            console.log('Sample results:', data.slice(0, 3).map(book => book.title));
             allResults = allResults.concat(data);
+          } else if (error) {
+            console.warn(`❌ Strategy ${strategy.description} failed:`, error.message);
           }
         } catch (strategyError) {
           console.warn('Search strategy failed:', strategy, strategyError);
@@ -945,6 +966,24 @@ Generate 8-10 specific book titles that match this request:`;
 
       if (allResults.length === 0) {
         console.log('❌ No results found for title:', title);
+        
+        // Debug: Let's see what books are actually in the database
+        try {
+          const { data: sampleBooks, error: sampleError } = await supabase
+            .from('books')
+            .select('id, title')
+            .is('deleted_at', null)
+            .limit(10);
+            
+          if (!sampleError && sampleBooks) {
+            console.log('📚 Sample books in database:', sampleBooks.map(book => book.title));
+          } else {
+            console.log('❌ Could not fetch sample books:', sampleError?.message);
+          }
+        } catch (debugError) {
+          console.log('❌ Debug query failed:', debugError);
+        }
+        
         return [];
       }
 
