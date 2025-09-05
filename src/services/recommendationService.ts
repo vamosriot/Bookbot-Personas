@@ -988,6 +988,7 @@ Generate 8-10 specific book titles that match this request:`;
 
   /**
    * Search database using vector embedding similarity
+   * Uses direct Supabase queries instead of RPC functions to avoid parameter issues
    */
   private async searchByEmbedding(
     embedding: number[],
@@ -996,18 +997,35 @@ Generate 8-10 specific book titles that match this request:`;
   ): Promise<RecommendationResult[]> {
     try {
       console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
+      console.log(`🔢 Using direct vector similarity search approach`);
       
-      // Try using the RPC function with proper vector casting
-      console.log(`🔢 Converting embedding to vector format: ${embedding.length} dimensions`);
-      
-      // Try different vector formats to see which one works
-      const vectorString = `[${embedding.join(',')}]`;
-      
-      const { data, error } = await supabase.rpc('search_similar_books', {
-        query_embedding: vectorString,
-        similarity_threshold: 0.5,
-        max_results: limit * 2
-      });
+      // Get all book embeddings and calculate similarity client-side
+      // This avoids the RPC function parameter issues
+      let query = supabase
+        .from('book_embeddings')
+        .select(`
+          book_id,
+          embedding,
+          books!inner (
+            id,
+            title,
+            master_mother_id,
+            great_grandmother_id,
+            misspelled,
+            deleted_at
+          )
+        `)
+        .eq('model', 'text-embedding-3-small');
+
+      // Add filtering for non-deleted books
+      if (!options.include_deleted) {
+        query = query.is('books.deleted_at', null);
+      }
+
+      // Limit the initial query to avoid loading too much data
+      query = query.limit(1000);
+
+      const { data, error } = await query;
 
       if (error) {
         console.warn('❌ Vector search error:', error.message);
@@ -1015,40 +1033,86 @@ Generate 8-10 specific book titles that match this request:`;
         return [];
       }
 
-      if (!data || (data as any[]).length === 0) {
-        console.log('❌ No vector search results found');
+      if (!data || data.length === 0) {
+        console.log('❌ No embeddings found in database');
         return [];
       }
 
-      // Transform results to RecommendationResult format
-      const results = (data as any[]).map(item => ({
-        id: item.book_id || 0,
-        title: item.title || '',
-        master_mother_id: item.master_mother_id || undefined,
-        great_grandmother_id: item.great_grandmother_id || undefined,
-        misspelled: item.misspelled || false,
-        deleted_at: item.deleted_at || undefined,
-        similarity_score: item.similarity_score || 0,
-        search_method: 'vector_embedding',
-        search_threshold: 0.5
-      })) as RecommendationResult[];
+      console.log(`📊 Retrieved ${data.length} book embeddings for similarity calculation`);
 
-      // Apply additional filtering if needed
-      let filteredResults = results;
+      // Calculate cosine similarity for each embedding
+      const results: (RecommendationResult & { similarity_score: number })[] = [];
+      
+      for (const item of data) {
+        if (!item.embedding || !Array.isArray(item.embedding)) {
+          continue;
+        }
 
-      // Filter out excluded IDs if provided
-      if (options.exclude_ids && options.exclude_ids.length > 0) {
-        filteredResults = filteredResults.filter(book => !options.exclude_ids!.includes(book.id));
+        // Calculate cosine similarity
+        const similarity = this.calculateCosineSimilarity(embedding, item.embedding);
+        
+        // Only include results above threshold
+        if (similarity >= 0.5) {
+          const book = (item as any).books;
+          
+          // Apply exclude_ids filter
+          if (options.exclude_ids && options.exclude_ids.includes(book.id)) {
+            continue;
+          }
+
+          results.push({
+            id: book.id,
+            title: book.title,
+            master_mother_id: book.master_mother_id,
+            great_grandmother_id: book.great_grandmother_id,
+            misspelled: book.misspelled,
+            deleted_at: book.deleted_at,
+            similarity_score: similarity,
+            search_method: 'vector_embedding_client',
+            search_threshold: 0.5
+          });
+        }
       }
 
-      console.log(`✅ Vector search found ${filteredResults.length} results after filtering`);
-      return filteredResults.slice(0, limit);
+      // Sort by similarity score (highest first)
+      results.sort((a, b) => b.similarity_score - a.similarity_score);
+
+      console.log(`✅ Vector search found ${results.length} results with similarity >= 0.5`);
+      return results.slice(0, limit);
       
     } catch (error) {
       console.error('❌ Error in vector search:', error);
       console.log('🔄 Falling back to text search due to vector search failure');
       return [];
     }
+  }
+
+  /**
+   * Calculate cosine similarity between two vectors
+   */
+  private calculateCosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) {
+      return 0;
+    }
+
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+
+    normA = Math.sqrt(normA);
+    normB = Math.sqrt(normB);
+
+    if (normA === 0 || normB === 0) {
+      return 0;
+    }
+
+    return dotProduct / (normA * normB);
   }
 
   /**
