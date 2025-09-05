@@ -1033,8 +1033,39 @@ Generate 8-10 specific book titles that match this request:`;
         return [];
       }
 
+      console.log('🔍 Database query result:', { 
+        hasData: !!data, 
+        dataLength: data?.length || 0,
+        error: error?.message || 'none'
+      });
+
       if (!data || data.length === 0) {
         console.log('❌ No embeddings found in database');
+        
+        // Let's check if there are any books at all
+        const { data: bookCount, error: bookError } = await supabase
+          .from('books')
+          .select('id', { count: 'exact' })
+          .limit(1);
+          
+        console.log('📊 Books table check:', { 
+          hasBooks: !!bookCount, 
+          bookCount: bookCount?.length || 0,
+          bookError: bookError?.message || 'none'
+        });
+        
+        // Let's check if there are any embeddings at all
+        const { data: embeddingCount, error: embeddingError } = await supabase
+          .from('book_embeddings')
+          .select('id', { count: 'exact' })
+          .limit(1);
+          
+        console.log('📊 Book embeddings table check:', { 
+          hasEmbeddings: !!embeddingCount, 
+          embeddingCount: embeddingCount?.length || 0,
+          embeddingError: embeddingError?.message || 'none'
+        });
+        
         return [];
       }
 
