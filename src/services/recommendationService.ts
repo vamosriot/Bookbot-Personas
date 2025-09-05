@@ -13,9 +13,8 @@
  * - Support for different search modes and thresholds
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { Database, RecommendationResult, RecommendationRequest, RecommendationResponse } from '@/types';
-import EmbeddingService from './embeddingService.js';
+import { supabase } from '@/lib/supabase';
 
 interface CacheEntry {
   results: RecommendationResult[];
@@ -30,8 +29,6 @@ interface SearchOptions {
 }
 
 export class RecommendationService {
-  private supabase: ReturnType<typeof createClient<Database>>;
-  private embeddingService: EmbeddingService;
   private cache = new Map<string, CacheEntry>();
   
   // Cache configuration
@@ -44,22 +41,7 @@ export class RecommendationService {
   private readonly MAX_LIMIT = 100;
 
   constructor() {
-    // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
-    }
-
-    this.supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    });
-
-    this.embeddingService = new EmbeddingService();
+    // No server-side dependencies in browser environment
   }
 
   /**
@@ -107,6 +89,98 @@ export class RecommendationService {
   }
 
   /**
+   * Performs text-based search for browser compatibility
+   */
+  private async performTextBasedSearch(
+    query: string,
+    limit: number,
+    options: SearchOptions = {}
+  ): Promise<RecommendationResult[]> {
+    try {
+      console.log('🔍 Performing text-based search for:', query);
+      
+      let supabaseQuery = supabase
+        .from('books')
+        .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
+        .ilike('title', `%${query}%`)
+        .limit(limit);
+
+      // Add filtering conditions
+      if (!options.include_deleted) {
+        supabaseQuery = supabaseQuery.is('deleted_at', null);
+      }
+
+      if (options.exclude_ids && options.exclude_ids.length > 0) {
+        supabaseQuery = supabaseQuery.not('id', 'in', `(${options.exclude_ids.join(',')})`);
+      }
+
+      const { data, error } = await supabaseQuery;
+
+      if (error) {
+        throw new Error(`Text search failed: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      // Transform results to match RecommendationResult interface
+      const results = data.map((book: any) => ({
+        id: book.id,
+        title: book.title,
+        similarity_score: this.calculateTextSimilarity(query, book.title),
+        master_mother_id: book.master_mother_id || undefined,
+        great_grandmother_id: book.great_grandmother_id || undefined,
+        misspelled: book.misspelled || false,
+        deleted_at: book.deleted_at || undefined
+      }));
+
+      // Sort by similarity score (text-based)
+      return results
+        .filter(result => result.similarity_score >= (options.similarity_threshold || 0.1))
+        .sort((a, b) => b.similarity_score - a.similarity_score);
+
+    } catch (error) {
+      console.error('Text-based search error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate simple text similarity score
+   */
+  private calculateTextSimilarity(query: string, title: string): number {
+    const queryLower = query.toLowerCase();
+    const titleLower = title.toLowerCase();
+    
+    // Exact match
+    if (titleLower === queryLower) {
+      return 1.0;
+    }
+    
+    // Contains query
+    if (titleLower.includes(queryLower)) {
+      return 0.8;
+    }
+    
+    // Word overlap
+    const queryWords = queryLower.split(/\s+/);
+    const titleWords = titleLower.split(/\s+/);
+    const commonWords = queryWords.filter(word => titleWords.includes(word));
+    
+    if (commonWords.length > 0) {
+      return 0.6 * (commonWords.length / queryWords.length);
+    }
+    
+    // Partial matches
+    const hasPartialMatch = queryWords.some(word => 
+      titleWords.some(titleWord => titleWord.includes(word) || word.includes(titleWord))
+    );
+    
+    return hasPartialMatch ? 0.3 : 0.1;
+  }
+
+  /**
    * Performs vector similarity search in the database
    */
   private async performVectorSearch(
@@ -116,7 +190,7 @@ export class RecommendationService {
   ): Promise<RecommendationResult[]> {
     try {
       // Build the query
-      let query = this.supabase
+      let query = supabase
         .from('book_embeddings')
         .select(`
           book_id,
@@ -191,7 +265,7 @@ export class RecommendationService {
     // This is a simplified approach - in production, you'd want to use the RPC method above
     // For now, we'll get all embeddings and compute similarity client-side (not recommended for large datasets)
     
-    let query = this.supabase
+    let query = supabase
       .from('book_embeddings')
       .select(`
         book_id,
@@ -280,7 +354,7 @@ export class RecommendationService {
    * Gets a book by its ID
    */
   async getBookById(id: number): Promise<RecommendationResult | null> {
-    const { data, error } = await this.supabase
+    const { data, error } = await supabase
       .from('books')
       .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
       .eq('id', id)
@@ -333,14 +407,10 @@ export class RecommendationService {
         };
       }
 
-      // Generate embedding for the query
-      const queryEmbedding = await this.embeddingService.generateSingleEmbedding(
-        `Title: ${cleanTitle}`
-      );
-
-      // Perform vector search
-      const recommendations = await this.performVectorSearch(
-        queryEmbedding,
+      // For browser compatibility, use text-based search instead of embeddings
+      // In a production environment, this would be handled server-side
+      const recommendations = await this.performTextBasedSearch(
+        cleanTitle,
         actualLimit,
         options
       );
@@ -409,7 +479,7 @@ export class RecommendationService {
     cache_size: number;
     cache_hit_rate?: number;
   }> {
-    const { count, error } = await this.supabase
+    const { count, error } = await supabase
       .from('book_embeddings')
       .select('*', { count: 'exact', head: true })
       .eq('model', 'text-embedding-3-small');

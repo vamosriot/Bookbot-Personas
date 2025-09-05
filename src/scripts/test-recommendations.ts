@@ -11,7 +11,6 @@
 
 import RecommendationService from '../services/recommendationService';
 import { databaseService } from '../services/database';
-import EmbeddingService from '../services/embeddingService';
 
 interface TestResult {
   testName: string;
@@ -24,12 +23,10 @@ interface TestResult {
 
 class RecommendationTester {
   private recommendationService: RecommendationService;
-  private embeddingService: EmbeddingService;
   private testResults: TestResult[] = [];
 
   constructor() {
     this.recommendationService = new RecommendationService();
-    this.embeddingService = new EmbeddingService();
   }
 
   /**
@@ -265,13 +262,7 @@ class RecommendationTester {
       for (const query of performanceQueries) {
         console.log(`  ⏱️  Benchmarking: "${query}"`);
         
-        // Test embedding generation time
-        const embeddingStart = Date.now();
-        await this.embeddingService.generateSingleEmbedding(query);
-        const embeddingTime = Date.now() - embeddingStart;
-        totalEmbeddingTime += embeddingTime;
-        
-        // Test search time
+        // Test search time (no embedding generation in browser version)
         const searchStart = Date.now();
         const searchResult = await this.recommendationService.findSimilarBooksByTitle(query, 5);
         const searchTime = Date.now() - searchStart;
@@ -279,16 +270,14 @@ class RecommendationTester {
         
         benchmarkResults.push({
           query,
-          embeddingTime,
           searchTime,
-          totalTime: embeddingTime + searchTime,
+          totalTime: searchTime,
           resultCount: searchResult.recommendations.length
         });
         
-        console.log(`    ⚡ Embedding: ${embeddingTime}ms, Search: ${searchTime}ms, Total: ${embeddingTime + searchTime}ms`);
+        console.log(`    ⚡ Search: ${searchTime}ms, Results: ${searchResult.recommendations.length}`);
       }
 
-      const avgEmbeddingTime = totalEmbeddingTime / performanceQueries.length;
       const avgSearchTime = totalSearchTime / performanceQueries.length;
 
       this.testResults.push({
@@ -297,13 +286,11 @@ class RecommendationTester {
         duration: Date.now() - startTime,
         results: benchmarkResults,
         details: {
-          averageEmbeddingTime: Math.round(avgEmbeddingTime),
           averageSearchTime: Math.round(avgSearchTime),
           totalQueries: performanceQueries.length
         }
       });
 
-      console.log(`    📊 Average embedding time: ${Math.round(avgEmbeddingTime)}ms`);
       console.log(`    📊 Average search time: ${Math.round(avgSearchTime)}ms`);
 
     } catch (error: any) {
@@ -508,7 +495,6 @@ class RecommendationTester {
     const performanceTest = this.testResults.find(t => t.testName === 'Performance Benchmarking');
     if (performanceTest && performanceTest.success && performanceTest.details) {
       console.log(`\n⚡ Performance Insights:`);
-      console.log(`   Average Embedding Time: ${performanceTest.details.averageEmbeddingTime}ms`);
       console.log(`   Average Search Time: ${performanceTest.details.averageSearchTime}ms`);
     }
 
