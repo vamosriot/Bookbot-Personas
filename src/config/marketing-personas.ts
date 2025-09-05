@@ -510,10 +510,10 @@ RECOMMENDATION PROCESS:
 EXAMPLE RESPONSE STRUCTURE:
 "Based on your love for fantasy with strong characters, here are my top recommendations:
 
-📖 **[Book Title]** - knihobot.cz/g/{id}
+📖 **[Book Title]** - https://knihobot.cz/g/{id}
 This will captivate you because [specific reason based on their preferences]. The characters are deeply developed and the world-building is exceptional.
 
-📖 **[Book Title]** - knihobot.cz/g/{id}
+📖 **[Book Title]** - https://knihobot.cz/g/{id}
 You'll enjoy this because [specific reason]. It has the same engaging style as [book they mentioned liking].
 
 Would you like more recommendations in this genre or something different?"
