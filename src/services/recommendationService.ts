@@ -99,13 +99,140 @@ export class RecommendationService {
     try {
       console.log('🔍 Performing text-based search for:', query);
       
+      // Extract meaningful keywords from Czech queries
+      const searchKeywords = this.extractSearchKeywords(query);
+      console.log('🔑 Extracted keywords:', searchKeywords);
+      
+      if (searchKeywords.length === 0) {
+        // If no keywords found, return some popular books
+        return this.getPopularBooks(limit, options);
+      }
+
+      // Try searching with different keyword combinations
+      let allResults: any[] = [];
+      
+      for (const keyword of searchKeywords) {
+        let supabaseQuery = supabase
+          .from('books')
+          .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
+          .ilike('title', `%${keyword}%`)
+          .limit(limit * 2); // Get more results to filter and rank
+
+        // Add filtering conditions
+        if (!options.include_deleted) {
+          supabaseQuery = supabaseQuery.is('deleted_at', null);
+        }
+
+        if (options.exclude_ids && options.exclude_ids.length > 0) {
+          supabaseQuery = supabaseQuery.not('id', 'in', `(${options.exclude_ids.join(',')})`);
+        }
+
+        const { data, error } = await supabaseQuery;
+
+        if (!error && data) {
+          allResults = allResults.concat(data);
+        }
+      }
+
+      if (allResults.length === 0) {
+        return this.getPopularBooks(limit, options);
+      }
+
+      // Remove duplicates and calculate similarity scores
+      const uniqueResults = new Map();
+      
+      allResults.forEach((book: any) => {
+        if (!uniqueResults.has(book.id)) {
+          uniqueResults.set(book.id, {
+            id: book.id,
+            title: book.title,
+            similarity_score: this.calculateEnhancedTextSimilarity(query, book.title, searchKeywords),
+            master_mother_id: book.master_mother_id || undefined,
+            great_grandmother_id: book.great_grandmother_id || undefined,
+            misspelled: book.misspelled || false,
+            deleted_at: book.deleted_at || undefined
+          });
+        }
+      });
+
+      // Sort by similarity score and return top results
+      return Array.from(uniqueResults.values())
+        .filter(result => result.similarity_score >= (options.similarity_threshold || 0.1))
+        .sort((a, b) => b.similarity_score - a.similarity_score)
+        .slice(0, limit);
+
+    } catch (error) {
+      console.error('Text-based search error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract meaningful search keywords from Czech queries
+   */
+  private extractSearchKeywords(query: string): string[] {
+    const lowerQuery = query.toLowerCase();
+    
+    // Common Czech words to ignore
+    const stopWords = new Set([
+      'najdi', 'mi', 'něco', 'prostě', 'pošli', 'spíše', 'nějaký', 'nějaké',
+      'českou', 'český', 'české', 'a', 'nebo', 'také', 'jen', 'pouze',
+      'doporuč', 'doporučte', 'chci', 'chtěl', 'chtěla', 'bych', 'by'
+    ]);
+    
+    // Extract potential book-related keywords
+    const keywords: string[] = [];
+    
+    // Look for genre/category words
+    const genreWords = {
+      'prózu': ['próza', 'román', 'povídka'],
+      'poezii': ['poezie', 'báseň', 'verš'],
+      'román': ['román'],
+      'současnost': ['současný', 'moderní', 'nový'],
+      'syrového': ['syrový', 'drsný', 'realistický'],
+      'fantasy': ['fantasy', 'fantazie'],
+      'sci-fi': ['sci-fi', 'science', 'fiction'],
+      'detektivka': ['detektivka', 'krimi', 'thriller'],
+      'historický': ['historický', 'historie'],
+      'romantický': ['romantický', 'láska', 'romance']
+    };
+    
+    // Check for genre matches
+    for (const [key, variations] of Object.entries(genreWords)) {
+      if (lowerQuery.includes(key)) {
+        keywords.push(...variations);
+      }
+    }
+    
+    // Extract other meaningful words (longer than 3 characters, not stop words)
+    const words = lowerQuery.split(/\s+/);
+    for (const word of words) {
+      const cleanWord = word.replace(/[.,!?;:]/, '');
+      if (cleanWord.length > 3 && !stopWords.has(cleanWord)) {
+        keywords.push(cleanWord);
+      }
+    }
+    
+    // If still no keywords, try some common book-related terms
+    if (keywords.length === 0) {
+      keywords.push('román', 'kniha', 'příběh');
+    }
+    
+    return [...new Set(keywords)]; // Remove duplicates
+  }
+
+  /**
+   * Get popular books as fallback
+   */
+  private async getPopularBooks(limit: number, options: SearchOptions = {}): Promise<RecommendationResult[]> {
+    try {
+      console.log('📚 Getting popular books as fallback');
+      
       let supabaseQuery = supabase
         .from('books')
         .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
-        .ilike('title', `%${query}%`)
         .limit(limit);
 
-      // Add filtering conditions
       if (!options.include_deleted) {
         supabaseQuery = supabaseQuery.is('deleted_at', null);
       }
@@ -116,34 +243,60 @@ export class RecommendationService {
 
       const { data, error } = await supabaseQuery;
 
-      if (error) {
-        throw new Error(`Text search failed: ${error.message}`);
-      }
-
-      if (!data || data.length === 0) {
+      if (error || !data) {
         return [];
       }
 
-      // Transform results to match RecommendationResult interface
-      const results = data.map((book: any) => ({
+      return data.map((book: any) => ({
         id: book.id,
         title: book.title,
-        similarity_score: this.calculateTextSimilarity(query, book.title),
+        similarity_score: 0.5, // Neutral score for popular books
         master_mother_id: book.master_mother_id || undefined,
         great_grandmother_id: book.great_grandmother_id || undefined,
         misspelled: book.misspelled || false,
         deleted_at: book.deleted_at || undefined
       }));
 
-      // Sort by similarity score (text-based)
-      return results
-        .filter(result => result.similarity_score >= (options.similarity_threshold || 0.1))
-        .sort((a, b) => b.similarity_score - a.similarity_score);
-
     } catch (error) {
-      console.error('Text-based search error:', error);
-      throw error;
+      console.error('Error getting popular books:', error);
+      return [];
     }
+  }
+
+  /**
+   * Calculate enhanced text similarity score using keywords
+   */
+  private calculateEnhancedTextSimilarity(query: string, title: string, keywords: string[]): number {
+    const titleLower = title.toLowerCase();
+    let score = 0;
+    
+    // Check for keyword matches in title
+    let keywordMatches = 0;
+    for (const keyword of keywords) {
+      if (titleLower.includes(keyword.toLowerCase())) {
+        keywordMatches++;
+        score += 0.3; // Each keyword match adds to score
+      }
+    }
+    
+    // Bonus for multiple keyword matches
+    if (keywordMatches > 1) {
+      score += 0.2 * (keywordMatches - 1);
+    }
+    
+    // Check for partial matches
+    const titleWords = titleLower.split(/\s+/);
+    for (const keyword of keywords) {
+      const keywordLower = keyword.toLowerCase();
+      for (const titleWord of titleWords) {
+        if (titleWord.includes(keywordLower) || keywordLower.includes(titleWord)) {
+          score += 0.1;
+        }
+      }
+    }
+    
+    // Ensure score doesn't exceed 1.0
+    return Math.min(score, 1.0);
   }
 
   /**
