@@ -653,7 +653,7 @@ export class RecommendationService {
   }
 
   /**
-   * Searches with iterative threshold lowering until results are found
+   * Searches with iterative threshold lowering and AI suggestion regeneration
    * Implements "search from most relevant until finds something" logic
    */
   async searchWithIterativeThresholds(
@@ -662,38 +662,57 @@ export class RecommendationService {
   ): Promise<RecommendationResult[]> {
     const startTime = Date.now();
     const thresholds = [0.9, 0.8, 0.7, 0.6, 0.5];
+    const maxAIAttempts = 3; // Maximum number of times to regenerate AI suggestions
     
     try {
-      console.log('🎯 Starting iterative threshold search:', { query, limit });
+      console.log('🎯 Starting iterative threshold search with AI regeneration:', { query, limit });
       
-      for (const threshold of thresholds) {
-        console.log(`🔍 Trying similarity threshold: ${threshold}`);
+      for (let aiAttempt = 1; aiAttempt <= maxAIAttempts; aiAttempt++) {
+        console.log(`🤖 AI attempt ${aiAttempt}/${maxAIAttempts}: Generating suggestions`);
         
-        const options = {
-          similarity_threshold: threshold,
-          include_deleted: false
-        };
+        // Generate AI suggestions (regenerate for each attempt)
+        const aiSuggestions = await this.generateAIBookSuggestions(query);
+        console.log(`🤖 AI generated suggestions (attempt ${aiAttempt}):`, aiSuggestions);
         
-        const result = await this.findSimilarBooksByTitle(query, limit, options);
-        
-        if (result.recommendations && result.recommendations.length > 0) {
-          console.log(`✅ Found ${result.recommendations.length} results at threshold ${threshold}`);
-          console.log(`⚡ Search completed in ${Date.now() - startTime}ms`);
+        // Try all thresholds with current AI suggestions
+        for (const threshold of thresholds) {
+          console.log(`🔍 Trying similarity threshold: ${threshold} (AI attempt ${aiAttempt})`);
           
-          // Add performance metadata to results
-          const enhancedResults = result.recommendations.map(book => ({
-            ...book,
-            search_threshold: threshold,
-            search_method: 'iterative_vector'
-          }));
+          const options = {
+            similarity_threshold: threshold,
+            include_deleted: false
+          };
           
-          return enhancedResults;
+          const recommendations = await this.findBestMatchesForSuggestions(
+            aiSuggestions,
+            limit,
+            options
+          );
+          
+          if (recommendations && recommendations.length > 0) {
+            console.log(`✅ Found ${recommendations.length} results at threshold ${threshold} (AI attempt ${aiAttempt})`);
+            console.log(`⚡ Search completed in ${Date.now() - startTime}ms`);
+            
+            // Add performance metadata to results
+            const enhancedResults = recommendations.map(book => ({
+              ...book,
+              search_threshold: threshold,
+              search_method: 'iterative_vector',
+              ai_attempt: aiAttempt
+            }));
+            
+            return enhancedResults;
+          }
+          
+          console.log(`❌ No results at threshold ${threshold} (AI attempt ${aiAttempt})`);
         }
         
-        console.log(`❌ No results at threshold ${threshold}, trying lower threshold`);
+        if (aiAttempt < maxAIAttempts) {
+          console.log(`🔄 No results found with current AI suggestions, regenerating... (attempt ${aiAttempt + 1})`);
+        }
       }
       
-      console.log('🚫 No results found at any threshold, returning empty array');
+      console.log(`🚫 No results found after ${maxAIAttempts} AI attempts and all thresholds`);
       return [];
       
     } catch (error) {
@@ -709,15 +728,16 @@ export class RecommendationService {
     try {
       console.log('🤖 Asking AI to generate book suggestions for:', query);
       
-      const systemPrompt = `You are a book recommendation expert. Given a user's request, generate a list of 8-10 specific book titles that would be most relevant to their request.
+      const systemPrompt = `You are a book recommendation expert with deep knowledge of Czech and international literature. Given a user's request, generate a list of 8-10 specific book titles that would be most relevant to their request.
 
 IMPORTANT RULES:
 1. Return ONLY book titles, one per line
-2. Include both popular and lesser-known books
-3. Consider the user's language (Czech requests should include Czech authors/translations)
-4. Be specific with titles (e.g., "Harry Potter and the Philosopher's Stone" not just "Harry Potter")
-5. Include a mix of classic and contemporary works
-6. No explanations, just the book titles
+2. If user mentions a specific author, provide ACTUAL titles by that author
+3. For Czech authors, use Czech titles (original or translated versions)
+4. Be accurate with author's actual works - don't invent titles
+5. Consider the user's language (Czech requests should prioritize Czech authors/translations)
+6. Include both popular and lesser-known works by the requested author
+7. No explanations, just the book titles
 
 Examples:
 User: "I want fantasy books"
@@ -731,16 +751,27 @@ The Hobbit
 The Chronicles of Narnia
 The Dark Tower
 
-User: "Najdi mi českou prózu"
+User: "Něco od Kundery"
 Response:
 Nesnesitelná lehkost bytí
-Ostře sledované vlaky
-R.U.R.
-Audience
-Báječní muži s klikou
-Viewegh - Báječná léta pod psa
-Topol - Sestra
-Kundera - Žert`;
+Žert
+Kniha smíchu a zapomnění
+Valčík na rozloučenou
+Život je jinde
+Ignorance
+Totožnost
+Pomalost
+
+User: "Chtěl bych si přečíst něco Mornštajnové"
+Response:
+Hlava XXII
+Hana
+Slepá mapa
+Tiché roky
+Rozmarné léto
+Hotýlek
+Zápisník alkoholičky Hany
+Němci`;
 
       const userPrompt = `User request: "${query}"
 
@@ -762,7 +793,7 @@ Generate 8-10 specific book titles that match this request:`;
             { role: 'user', content: userPrompt }
           ],
           max_completion_tokens: 300,
-          temperature: 0.7,
+          temperature: 0.8, // Higher temperature for more variety in regenerated suggestions
           stream: false
         })
       });
@@ -866,30 +897,68 @@ Generate 8-10 specific book titles that match this request:`;
     options: SearchOptions = {}
   ): Promise<RecommendationResult[]> {
     try {
-      // Search for exact and partial matches
-      let supabaseQuery = supabase
-        .from('books')
-        .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
-        .or(`title.ilike.%${title}%,title.ilike.%${title.split(' ')[0]}%`)
-        .limit(5);
+      console.log('🔍 Searching database for title:', title);
+      
+      // Escape special characters and handle Czech characters properly
+      const escapedTitle = title.replace(/[%_]/g, '\\$&');
+      const firstWord = title.split(' ')[0].replace(/[%_]/g, '\\$&');
+      
+      // Try multiple search strategies
+      const searchStrategies = [
+        // Exact title match
+        { field: 'title', operator: 'ilike', value: `%${escapedTitle}%` },
+        // First word match
+        { field: 'title', operator: 'ilike', value: `%${firstWord}%` },
+        // Author name search (for cases like "Mornštajnová")
+        { field: 'title', operator: 'ilike', value: `%${escapedTitle.split(' ').pop()}%` }
+      ];
 
-      // Add filtering conditions
-      if (!options.include_deleted) {
-        supabaseQuery = supabaseQuery.is('deleted_at', null);
+      let allResults: any[] = [];
+
+      for (const strategy of searchStrategies) {
+        try {
+          let supabaseQuery = supabase
+            .from('books')
+            .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
+            .ilike(strategy.field, strategy.value)
+            .limit(10);
+
+          // Add filtering conditions
+          if (!options.include_deleted) {
+            supabaseQuery = supabaseQuery.is('deleted_at', null);
+          }
+
+          if (options.exclude_ids && options.exclude_ids.length > 0) {
+            supabaseQuery = supabaseQuery.not('id', 'in', `(${options.exclude_ids.join(',')})`);
+          }
+
+          const { data, error } = await supabaseQuery;
+
+          if (!error && data && data.length > 0) {
+            console.log(`✅ Found ${data.length} results with strategy:`, strategy);
+            allResults = allResults.concat(data);
+          }
+        } catch (strategyError) {
+          console.warn('Search strategy failed:', strategy, strategyError);
+        }
       }
 
-      if (options.exclude_ids && options.exclude_ids.length > 0) {
-        supabaseQuery = supabaseQuery.not('id', 'in', `(${options.exclude_ids.join(',')})`);
-      }
-
-      const { data, error } = await supabaseQuery;
-
-      if (error || !data) {
+      if (allResults.length === 0) {
+        console.log('❌ No results found for title:', title);
         return [];
       }
 
+      // Remove duplicates and calculate similarity scores
+      const uniqueResults = new Map<number, any>();
+      
+      allResults.forEach(book => {
+        if (!uniqueResults.has(book.id)) {
+          uniqueResults.set(book.id, book);
+        }
+      });
+
       // Calculate similarity scores for each match
-      return data.map((book: any) => ({
+      const results = Array.from(uniqueResults.values()).map((book: any) => ({
         id: book.id,
         title: book.title,
         similarity_score: this.calculateTitleSimilarity(title, book.title),
@@ -899,8 +968,11 @@ Generate 8-10 specific book titles that match this request:`;
         deleted_at: book.deleted_at || undefined
       })).filter(result => result.similarity_score > 0.1);
 
+      console.log(`📚 Returning ${results.length} results for "${title}"`);
+      return results;
+
     } catch (error) {
-      console.error('Database search error:', error);
+      console.error('Database search error for title:', title, error);
       return [];
     }
   }
