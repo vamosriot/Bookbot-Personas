@@ -999,129 +999,101 @@ Generate 8-10 specific book titles that match this request:`;
       console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
       console.log(`🔢 Using direct vector similarity search approach`);
       
-      // Get all book embeddings and calculate similarity client-side
-      // This avoids the RPC function parameter issues
-      let query = supabase
+      // Simplified approach: fetch embeddings and books separately to avoid join issues
+      console.log('🔍 Step 1: Fetching embeddings...');
+      
+      const { data: embeddingData, error: embeddingError } = await supabase
         .from('book_embeddings')
-        .select(`
-          book_id,
-          embedding,
-          books!inner (
-            id,
-            title,
-            master_mother_id,
-            great_grandmother_id,
-            misspelled,
-            deleted_at
-          )
-        `)
+        .select('book_id, embedding')
         .eq('model', 'text-embedding-3-small');
 
-      // Add filtering for non-deleted books
-      if (!options.include_deleted) {
-        query = query.is('books.deleted_at', null);
-      }
-
-      // Limit the initial query to avoid loading too much data
-      query = query.limit(1000);
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.warn('❌ Vector search error:', error.message);
-        console.log('🔄 Falling back to text search due to vector search failure');
-        return [];
-      }
-
-      console.log('🔍 Database query result:', { 
-        hasData: !!data, 
-        dataLength: data?.length || 0,
-        error: error?.message || 'none'
+      console.log('🔍 Embeddings query result:', { 
+        hasData: !!embeddingData, 
+        dataLength: embeddingData?.length || 0,
+        error: embeddingError?.message || 'none'
       });
 
-      if (!data || data.length === 0) {
-        console.log('❌ No embeddings found with current query');
-        
-        // Let's check if there are any embeddings at all (without the complex join)
-        const { data: simpleEmbeddings, error: simpleError } = await supabase
-          .from('book_embeddings')
-          .select('book_id, model')
-          .limit(5);
-          
-        console.log('📊 Simple embeddings check:', { 
-          hasEmbeddings: !!simpleEmbeddings, 
-          embeddingCount: simpleEmbeddings?.length || 0,
-          embeddings: simpleEmbeddings,
-          error: simpleError?.message || 'none'
-        });
-        
-        // Let's also check books table
-        const { data: simpleBooks, error: bookError } = await supabase
-          .from('books')
-          .select('id, title')
-          .limit(5);
-          
-        console.log('📊 Simple books check:', { 
-          hasBooks: !!simpleBooks, 
-          bookCount: simpleBooks?.length || 0,
-          books: simpleBooks,
-          error: bookError?.message || 'none'
-        });
-        
-        // Let's try a simpler query to see what's wrong with the join
-        const { data: testJoin, error: joinError } = await supabase
-          .from('book_embeddings')
-          .select(`
-            book_id,
-            model,
-            books!inner (id, title)
-          `)
-          .eq('model', 'text-embedding-3-small')
-          .limit(3);
-          
-        console.log('📊 Test join query:', { 
-          hasData: !!testJoin, 
-          dataLength: testJoin?.length || 0,
-          data: testJoin,
-          error: joinError?.message || 'none'
-        });
-        
+      if (embeddingError) {
+        console.error('❌ Embeddings query error:', embeddingError);
         return [];
       }
 
-      console.log(`📊 Retrieved ${data.length} book embeddings for similarity calculation`);
+      if (!embeddingData || embeddingData.length === 0) {
+        console.log('❌ No embeddings found with model text-embedding-3-small');
+        return [];
+      }
+
+      // Get unique book IDs from embeddings
+      const bookIds = [...new Set((embeddingData as any[]).map(item => item.book_id))];
+      console.log(`🔍 Step 2: Found ${embeddingData.length} embeddings for ${bookIds.length} unique books`);
+
+      // Fetch corresponding books
+      let bookQuery = supabase
+        .from('books')
+        .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
+        .in('id', bookIds);
+
+      if (!options.include_deleted) {
+        bookQuery = bookQuery.is('deleted_at', null);
+      }
+
+      const { data: bookData, error: bookError } = await bookQuery;
+
+      console.log('📚 Books query result:', { 
+        hasData: !!bookData, 
+        dataLength: bookData?.length || 0,
+        error: bookError?.message || 'none'
+      });
+
+      if (bookError) {
+        console.error('❌ Books query error:', bookError);
+        return [];
+      }
+
+      if (!bookData || bookData.length === 0) {
+        console.log('❌ No books found for embedding book_ids (possibly all deleted)');
+        return [];
+      }
+
+      // Create a map of book_id to book data for efficient lookup
+      const bookMap = new Map((bookData as any[]).map(book => [book.id, book]));
+      console.log(`📊 Retrieved ${embeddingData.length} embeddings and ${bookData.length} books for similarity calculation`);
 
       // Calculate cosine similarity for each embedding
       const results: (RecommendationResult & { similarity_score: number })[] = [];
       
-      for (const item of data) {
-        if (!item.embedding || !Array.isArray(item.embedding)) {
+      for (const embeddingItem of (embeddingData as any[])) {
+        if (!embeddingItem.embedding || !Array.isArray(embeddingItem.embedding)) {
+          continue;
+        }
+
+        // Get the corresponding book data
+        const book = bookMap.get(embeddingItem.book_id);
+        if (!book) {
+          continue; // Book not found (possibly deleted)
+        }
+
+        // Apply exclude_ids filter
+        if (options.exclude_ids && options.exclude_ids.includes(book.id)) {
           continue;
         }
 
         // Calculate cosine similarity
-        const similarity = this.calculateCosineSimilarity(embedding, item.embedding);
+        const similarity = this.calculateCosineSimilarity(embedding, embeddingItem.embedding);
         
         // Only include results above threshold
         if (similarity >= 0.5) {
-          const book = (item as any).books;
-          
-          // Apply exclude_ids filter
-          if (options.exclude_ids && options.exclude_ids.includes(book.id)) {
-            continue;
-          }
-
           results.push({
             id: book.id,
             title: book.title,
             master_mother_id: book.master_mother_id,
             great_grandmother_id: book.great_grandmother_id,
-            misspelled: book.misspelled,
-            deleted_at: book.deleted_at,
+            misspelled: book.misspelled || false,
+            deleted_at: book.deleted_at || undefined,
             similarity_score: similarity,
-            search_method: 'vector_embedding_client',
+            search_method: 'vector_embedding_client' as any,
             search_threshold: 0.5
-          });
+          } as any);
         }
       }
 
