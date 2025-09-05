@@ -529,7 +529,7 @@ export class RecommendationService {
   }
 
   /**
-   * Finds books similar to a given title
+   * Finds books similar to a given title using AI-powered two-step approach
    */
   async findSimilarBooksByTitle(
     title: string,
@@ -560,10 +560,13 @@ export class RecommendationService {
         };
       }
 
-      // For browser compatibility, use text-based search instead of embeddings
-      // In a production environment, this would be handled server-side
-      const recommendations = await this.performTextBasedSearch(
-        cleanTitle,
+      // Step 1: Generate AI-powered book suggestions based on the query
+      const aiSuggestions = await this.generateAIBookSuggestions(cleanTitle);
+      console.log('🤖 AI generated book suggestions:', aiSuggestions);
+
+      // Step 2: Search database for closest matches to AI suggestions
+      const recommendations = await this.findBestMatchesForSuggestions(
+        aiSuggestions,
         actualLimit,
         options
       );
@@ -695,6 +698,337 @@ export class RecommendationService {
       console.error('Error in iterative threshold search:', error);
       throw new Error(`Iterative search failed: ${error}`);
     }
+  }
+
+  /**
+   * Generate AI-powered book suggestions based on user query
+   */
+  private async generateAIBookSuggestions(query: string): Promise<string[]> {
+    // This is a knowledge-based approach using predefined mappings
+    // In a full implementation, this could call an AI service
+    
+    const queryLower = query.toLowerCase();
+    
+    // Genre-based suggestions
+    const genreMappings: { [key: string]: string[] } = {
+      'fantasy': [
+        'Harry Potter',
+        'Lord of the Rings',
+        'Game of Thrones',
+        'The Hobbit',
+        'Chronicles of Narnia',
+        'The Wheel of Time',
+        'Mistborn',
+        'The Name of the Wind',
+        'The Dark Tower',
+        'Eragon'
+      ],
+      'sci-fi': [
+        'Dune',
+        'Foundation',
+        'Ender\'s Game',
+        'The Hitchhiker\'s Guide to the Galaxy',
+        '1984',
+        'Brave New World',
+        'The Martian',
+        'Neuromancer',
+        'Starship Troopers',
+        'The Time Machine'
+      ],
+      'romance': [
+        'Pride and Prejudice',
+        'Jane Eyre',
+        'The Notebook',
+        'Outlander',
+        'Me Before You',
+        'The Fault in Our Stars',
+        'Gone Girl',
+        'Fifty Shades of Grey',
+        'The Time Traveler\'s Wife',
+        'Dear John'
+      ],
+      'mystery': [
+        'Sherlock Holmes',
+        'Agatha Christie',
+        'The Girl with the Dragon Tattoo',
+        'Gone Girl',
+        'The Da Vinci Code',
+        'Murder on the Orient Express',
+        'The Silence of the Lambs',
+        'Big Little Lies',
+        'The Girl on the Train',
+        'In the Woods'
+      ],
+      'thriller': [
+        'The Girl with the Dragon Tattoo',
+        'Gone Girl',
+        'The Silence of the Lambs',
+        'The Da Vinci Code',
+        'Jack Reacher',
+        'Jason Bourne',
+        'The Hunt for Red October',
+        'The Firm',
+        'Jurassic Park',
+        'The Andromeda Strain'
+      ],
+      'horror': [
+        'Stephen King',
+        'The Shining',
+        'It',
+        'Dracula',
+        'Frankenstein',
+        'The Exorcist',
+        'Pet Sematary',
+        'The Stand',
+        'World War Z',
+        'The Haunting of Hill House'
+      ],
+      'historical': [
+        'The Pillars of the Earth',
+        'All Quiet on the Western Front',
+        'War and Peace',
+        'Gone with the Wind',
+        'The Book Thief',
+        'Outlander',
+        'The Other Boleyn Girl',
+        'Cold Mountain',
+        'Memoirs of a Geisha',
+        'The Kite Runner'
+      ],
+      'contemporary': [
+        'The Fault in Our Stars',
+        'Where the Crawdads Sing',
+        'Educated',
+        'Becoming',
+        'The Seven Husbands of Evelyn Hugo',
+        'Little Fires Everywhere',
+        'The Silent Patient',
+        'Circe',
+        'Normal People',
+        'Such a Fun Age'
+      ]
+    };
+
+    // Czech genre mappings
+    const czechGenreMappings: { [key: string]: string[] } = {
+      'próza': [
+        'Milan Kundera',
+        'Bohumil Hrabal',
+        'Karel Čapek',
+        'Václav Havel',
+        'Ivan Klíma',
+        'Michal Viewegh',
+        'Patrik Ouředník',
+        'Jáchym Topol',
+        'Petra Hůlová',
+        'Kateřina Tučková'
+      ],
+      'současnost': [
+        'Michal Viewegh',
+        'Patrik Ouředník',
+        'Jáchym Topol',
+        'Petra Hůlová',
+        'Kateřina Tučková',
+        'Radka Denemarková',
+        'Tomáš Zmeškal',
+        'Bianca Bellová',
+        'Marek Torčík',
+        'Jakub Katalpa'
+      ],
+      'český': [
+        'Milan Kundera',
+        'Bohumil Hrabal',
+        'Karel Čapek',
+        'Václav Havel',
+        'Josef Škvorecký',
+        'Ota Pavel',
+        'Ladislav Fuks',
+        'Arnošt Lustig',
+        'Jiří Weil',
+        'Egon Hostovský'
+      ]
+    };
+
+    let suggestions: string[] = [];
+
+    // Check for genre matches
+    for (const [genre, books] of Object.entries(genreMappings)) {
+      if (queryLower.includes(genre)) {
+        suggestions.push(...books);
+      }
+    }
+
+    // Check for Czech genre matches
+    for (const [genre, books] of Object.entries(czechGenreMappings)) {
+      if (queryLower.includes(genre)) {
+        suggestions.push(...books);
+      }
+    }
+
+    // If no genre matches, try to extract meaningful terms
+    if (suggestions.length === 0) {
+      // Look for author names or specific book mentions
+      const words = queryLower.split(/\s+/);
+      for (const word of words) {
+        if (word.length > 4) {
+          // Add some popular books as fallback
+          suggestions.push(
+            'Harry Potter',
+            'Lord of the Rings',
+            'Milan Kundera',
+            'Bohumil Hrabal',
+            'The Great Gatsby',
+            'To Kill a Mockingbird'
+          );
+          break;
+        }
+      }
+    }
+
+    // Remove duplicates and limit results
+    return [...new Set(suggestions)].slice(0, 10);
+  }
+
+  /**
+   * Find best matches in database for AI-generated suggestions
+   */
+  private async findBestMatchesForSuggestions(
+    suggestions: string[],
+    limit: number,
+    options: SearchOptions = {}
+  ): Promise<RecommendationResult[]> {
+    console.log('🔍 Searching database for AI suggestions:', suggestions);
+    
+    const allMatches: RecommendationResult[] = [];
+    
+    for (const suggestion of suggestions) {
+      try {
+        // Search for each suggestion in the database
+        const matches = await this.searchDatabaseForTitle(suggestion, options);
+        
+        // Add matches with relevance score based on suggestion order
+        matches.forEach((match, index) => {
+          const suggestionIndex = suggestions.indexOf(suggestion);
+          const relevanceBonus = (suggestions.length - suggestionIndex) / suggestions.length;
+          
+          allMatches.push({
+            ...match,
+            similarity_score: Math.min(match.similarity_score + relevanceBonus * 0.3, 1.0),
+            ai_suggestion: suggestion // Track which AI suggestion led to this match
+          } as RecommendationResult & { ai_suggestion: string });
+        });
+        
+      } catch (error) {
+        console.warn(`Failed to search for suggestion "${suggestion}":`, error);
+      }
+    }
+
+    // Remove duplicates (same book ID)
+    const uniqueMatches = new Map<number, RecommendationResult>();
+    
+    allMatches.forEach(match => {
+      const existing = uniqueMatches.get(match.id);
+      if (!existing || match.similarity_score > existing.similarity_score) {
+        uniqueMatches.set(match.id, match);
+      }
+    });
+
+    // Sort by similarity score and return top results
+    return Array.from(uniqueMatches.values())
+      .sort((a, b) => b.similarity_score - a.similarity_score)
+      .slice(0, limit);
+  }
+
+  /**
+   * Search database for a specific title
+   */
+  private async searchDatabaseForTitle(
+    title: string,
+    options: SearchOptions = {}
+  ): Promise<RecommendationResult[]> {
+    try {
+      // Search for exact and partial matches
+      let supabaseQuery = supabase
+        .from('books')
+        .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
+        .or(`title.ilike.%${title}%,title.ilike.%${title.split(' ')[0]}%`)
+        .limit(5);
+
+      // Add filtering conditions
+      if (!options.include_deleted) {
+        supabaseQuery = supabaseQuery.is('deleted_at', null);
+      }
+
+      if (options.exclude_ids && options.exclude_ids.length > 0) {
+        supabaseQuery = supabaseQuery.not('id', 'in', `(${options.exclude_ids.join(',')})`);
+      }
+
+      const { data, error } = await supabaseQuery;
+
+      if (error || !data) {
+        return [];
+      }
+
+      // Calculate similarity scores for each match
+      return data.map((book: any) => ({
+        id: book.id,
+        title: book.title,
+        similarity_score: this.calculateTitleSimilarity(title, book.title),
+        master_mother_id: book.master_mother_id || undefined,
+        great_grandmother_id: book.great_grandmother_id || undefined,
+        misspelled: book.misspelled || false,
+        deleted_at: book.deleted_at || undefined
+      })).filter(result => result.similarity_score > 0.1);
+
+    } catch (error) {
+      console.error('Database search error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Calculate similarity between AI suggestion and database title
+   */
+  private calculateTitleSimilarity(suggestion: string, dbTitle: string): number {
+    const suggestionLower = suggestion.toLowerCase();
+    const titleLower = dbTitle.toLowerCase();
+    
+    // Exact match
+    if (titleLower === suggestionLower) {
+      return 1.0;
+    }
+    
+    // Title contains suggestion
+    if (titleLower.includes(suggestionLower)) {
+      return 0.9;
+    }
+    
+    // Suggestion contains title
+    if (suggestionLower.includes(titleLower)) {
+      return 0.8;
+    }
+    
+    // Word-by-word comparison
+    const suggestionWords = suggestionLower.split(/\s+/);
+    const titleWords = titleLower.split(/\s+/);
+    
+    let matchingWords = 0;
+    for (const suggestionWord of suggestionWords) {
+      for (const titleWord of titleWords) {
+        if (suggestionWord === titleWord || 
+            suggestionWord.includes(titleWord) || 
+            titleWord.includes(suggestionWord)) {
+          matchingWords++;
+          break;
+        }
+      }
+    }
+    
+    if (matchingWords > 0) {
+      return 0.5 + (matchingWords / Math.max(suggestionWords.length, titleWords.length)) * 0.3;
+    }
+    
+    return 0.1;
   }
 
   /**
