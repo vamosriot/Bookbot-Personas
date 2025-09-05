@@ -1040,30 +1040,50 @@ Generate 8-10 specific book titles that match this request:`;
       });
 
       if (!data || data.length === 0) {
-        console.log('❌ No embeddings found in database');
+        console.log('❌ No embeddings found with current query');
         
-        // Let's check if there are any books at all
-        const { data: bookCount, error: bookError } = await supabase
-          .from('books')
-          .select('id', { count: 'exact' })
-          .limit(1);
+        // Let's check if there are any embeddings at all (without the complex join)
+        const { data: simpleEmbeddings, error: simpleError } = await supabase
+          .from('book_embeddings')
+          .select('book_id, model')
+          .limit(5);
           
-        console.log('📊 Books table check:', { 
-          hasBooks: !!bookCount, 
-          bookCount: bookCount?.length || 0,
-          bookError: bookError?.message || 'none'
+        console.log('📊 Simple embeddings check:', { 
+          hasEmbeddings: !!simpleEmbeddings, 
+          embeddingCount: simpleEmbeddings?.length || 0,
+          embeddings: simpleEmbeddings,
+          error: simpleError?.message || 'none'
         });
         
-        // Let's check if there are any embeddings at all
-        const { data: embeddingCount, error: embeddingError } = await supabase
-          .from('book_embeddings')
-          .select('id', { count: 'exact' })
-          .limit(1);
+        // Let's also check books table
+        const { data: simpleBooks, error: bookError } = await supabase
+          .from('books')
+          .select('id, title')
+          .limit(5);
           
-        console.log('📊 Book embeddings table check:', { 
-          hasEmbeddings: !!embeddingCount, 
-          embeddingCount: embeddingCount?.length || 0,
-          embeddingError: embeddingError?.message || 'none'
+        console.log('📊 Simple books check:', { 
+          hasBooks: !!simpleBooks, 
+          bookCount: simpleBooks?.length || 0,
+          books: simpleBooks,
+          error: bookError?.message || 'none'
+        });
+        
+        // Let's try a simpler query to see what's wrong with the join
+        const { data: testJoin, error: joinError } = await supabase
+          .from('book_embeddings')
+          .select(`
+            book_id,
+            model,
+            books!inner (id, title)
+          `)
+          .eq('model', 'text-embedding-3-small')
+          .limit(3);
+          
+        console.log('📊 Test join query:', { 
+          hasData: !!testJoin, 
+          dataLength: testJoin?.length || 0,
+          data: testJoin,
+          error: joinError?.message || 'none'
         });
         
         return [];
