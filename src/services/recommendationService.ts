@@ -15,6 +15,8 @@
 
 import { Database, RecommendationResult, RecommendationRequest, RecommendationResponse } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { CLOUDFLARE_WORKER_URL } from '@/config/constants';
+import { getAuthHeaders } from '@/lib/supabase';
 
 interface CacheEntry {
   results: RecommendationResult[];
@@ -701,192 +703,109 @@ export class RecommendationService {
   }
 
   /**
-   * Generate AI-powered book suggestions based on user query
+   * Generate AI-powered book suggestions based on user query using GPT
    */
   private async generateAIBookSuggestions(query: string): Promise<string[]> {
-    // This is a knowledge-based approach using predefined mappings
-    // In a full implementation, this could call an AI service
-    
-    const queryLower = query.toLowerCase();
-    
-    // Genre-based suggestions
-    const genreMappings: { [key: string]: string[] } = {
-      'fantasy': [
-        'Harry Potter',
-        'Lord of the Rings',
-        'Game of Thrones',
-        'The Hobbit',
-        'Chronicles of Narnia',
-        'The Wheel of Time',
-        'Mistborn',
-        'The Name of the Wind',
-        'The Dark Tower',
-        'Eragon'
-      ],
-      'sci-fi': [
-        'Dune',
-        'Foundation',
-        'Ender\'s Game',
-        'The Hitchhiker\'s Guide to the Galaxy',
-        '1984',
-        'Brave New World',
-        'The Martian',
-        'Neuromancer',
-        'Starship Troopers',
-        'The Time Machine'
-      ],
-      'romance': [
+    try {
+      console.log('🤖 Asking AI to generate book suggestions for:', query);
+      
+      const systemPrompt = `You are a book recommendation expert. Given a user's request, generate a list of 8-10 specific book titles that would be most relevant to their request.
+
+IMPORTANT RULES:
+1. Return ONLY book titles, one per line
+2. Include both popular and lesser-known books
+3. Consider the user's language (Czech requests should include Czech authors/translations)
+4. Be specific with titles (e.g., "Harry Potter and the Philosopher's Stone" not just "Harry Potter")
+5. Include a mix of classic and contemporary works
+6. No explanations, just the book titles
+
+Examples:
+User: "I want fantasy books"
+Response:
+Harry Potter and the Philosopher's Stone
+The Lord of the Rings
+A Game of Thrones
+The Name of the Wind
+The Way of Kings
+The Hobbit
+The Chronicles of Narnia
+The Dark Tower
+
+User: "Najdi mi českou prózu"
+Response:
+Nesnesitelná lehkost bytí
+Ostře sledované vlaky
+R.U.R.
+Audience
+Báječní muži s klikou
+Viewegh - Báječná léta pod psa
+Topol - Sestra
+Kundera - Žert`;
+
+      const userPrompt = `User request: "${query}"
+
+Generate 8-10 specific book titles that match this request:`;
+
+      // Call OpenAI via Cloudflare Worker
+      const authHeaders = await getAuthHeaders();
+      
+      const response = await fetch(CLOUDFLARE_WORKER_URL, {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini', // Use faster model for suggestions
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_completion_tokens: 300,
+          temperature: 0.7,
+          stream: false
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI service error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aiResponse = data.choices?.[0]?.message?.content || '';
+      
+      // Parse the AI response to extract book titles
+      const suggestions = aiResponse
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('User:') && !line.startsWith('Response:'))
+        .slice(0, 10); // Limit to 10 suggestions
+
+      console.log('🤖 AI generated suggestions:', suggestions);
+      
+      if (suggestions.length === 0) {
+        // Fallback to some popular books if AI fails
+        return ['Harry Potter', 'Lord of the Rings', 'The Great Gatsby', 'To Kill a Mockingbird'];
+      }
+
+      return suggestions;
+
+    } catch (error) {
+      console.error('Error generating AI suggestions:', error);
+      
+      // Fallback to basic suggestions if AI fails
+      const fallbackSuggestions = [
+        'Harry Potter and the Philosopher\'s Stone',
+        'The Lord of the Rings',
+        'The Great Gatsby',
+        'To Kill a Mockingbird',
         'Pride and Prejudice',
-        'Jane Eyre',
-        'The Notebook',
-        'Outlander',
-        'Me Before You',
-        'The Fault in Our Stars',
-        'Gone Girl',
-        'Fifty Shades of Grey',
-        'The Time Traveler\'s Wife',
-        'Dear John'
-      ],
-      'mystery': [
-        'Sherlock Holmes',
-        'Agatha Christie',
-        'The Girl with the Dragon Tattoo',
-        'Gone Girl',
-        'The Da Vinci Code',
-        'Murder on the Orient Express',
-        'The Silence of the Lambs',
-        'Big Little Lies',
-        'The Girl on the Train',
-        'In the Woods'
-      ],
-      'thriller': [
-        'The Girl with the Dragon Tattoo',
-        'Gone Girl',
-        'The Silence of the Lambs',
-        'The Da Vinci Code',
-        'Jack Reacher',
-        'Jason Bourne',
-        'The Hunt for Red October',
-        'The Firm',
-        'Jurassic Park',
-        'The Andromeda Strain'
-      ],
-      'horror': [
-        'Stephen King',
-        'The Shining',
-        'It',
-        'Dracula',
-        'Frankenstein',
-        'The Exorcist',
-        'Pet Sematary',
-        'The Stand',
-        'World War Z',
-        'The Haunting of Hill House'
-      ],
-      'historical': [
-        'The Pillars of the Earth',
-        'All Quiet on the Western Front',
-        'War and Peace',
-        'Gone with the Wind',
-        'The Book Thief',
-        'Outlander',
-        'The Other Boleyn Girl',
-        'Cold Mountain',
-        'Memoirs of a Geisha',
-        'The Kite Runner'
-      ],
-      'contemporary': [
-        'The Fault in Our Stars',
-        'Where the Crawdads Sing',
-        'Educated',
-        'Becoming',
-        'The Seven Husbands of Evelyn Hugo',
-        'Little Fires Everywhere',
-        'The Silent Patient',
-        'Circe',
-        'Normal People',
-        'Such a Fun Age'
-      ]
-    };
-
-    // Czech genre mappings
-    const czechGenreMappings: { [key: string]: string[] } = {
-      'próza': [
-        'Milan Kundera',
-        'Bohumil Hrabal',
-        'Karel Čapek',
-        'Václav Havel',
-        'Ivan Klíma',
-        'Michal Viewegh',
-        'Patrik Ouředník',
-        'Jáchym Topol',
-        'Petra Hůlová',
-        'Kateřina Tučková'
-      ],
-      'současnost': [
-        'Michal Viewegh',
-        'Patrik Ouředník',
-        'Jáchym Topol',
-        'Petra Hůlová',
-        'Kateřina Tučková',
-        'Radka Denemarková',
-        'Tomáš Zmeškal',
-        'Bianca Bellová',
-        'Marek Torčík',
-        'Jakub Katalpa'
-      ],
-      'český': [
-        'Milan Kundera',
-        'Bohumil Hrabal',
-        'Karel Čapek',
-        'Václav Havel',
-        'Josef Škvorecký',
-        'Ota Pavel',
-        'Ladislav Fuks',
-        'Arnošt Lustig',
-        'Jiří Weil',
-        'Egon Hostovský'
-      ]
-    };
-
-    let suggestions: string[] = [];
-
-    // Check for genre matches
-    for (const [genre, books] of Object.entries(genreMappings)) {
-      if (queryLower.includes(genre)) {
-        suggestions.push(...books);
-      }
+        '1984'
+      ];
+      
+      console.log('🔄 Using fallback suggestions:', fallbackSuggestions);
+      return fallbackSuggestions;
     }
-
-    // Check for Czech genre matches
-    for (const [genre, books] of Object.entries(czechGenreMappings)) {
-      if (queryLower.includes(genre)) {
-        suggestions.push(...books);
-      }
-    }
-
-    // If no genre matches, try to extract meaningful terms
-    if (suggestions.length === 0) {
-      // Look for author names or specific book mentions
-      const words = queryLower.split(/\s+/);
-      for (const word of words) {
-        if (word.length > 4) {
-          // Add some popular books as fallback
-          suggestions.push(
-            'Harry Potter',
-            'Lord of the Rings',
-            'Milan Kundera',
-            'Bohumil Hrabal',
-            'The Great Gatsby',
-            'To Kill a Mockingbird'
-          );
-          break;
-        }
-      }
-    }
-
-    // Remove duplicates and limit results
-    return [...new Set(suggestions)].slice(0, 10);
   }
 
   /**
