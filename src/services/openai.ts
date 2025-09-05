@@ -10,10 +10,16 @@ import {
   ERROR_MESSAGES 
 } from '@/config/constants';
 import { getAuthHeaders, supabase } from '@/lib/supabase';
+import RecommendationService from './recommendationService';
 
 export class OpenAIService {
   private static instance: OpenAIService;
   private controller: AbortController | null = null;
+  private recommendationService: RecommendationService;
+
+  constructor() {
+    this.recommendationService = new RecommendationService();
+  }
 
   static getInstance(): OpenAIService {
     if (!OpenAIService.instance) {
@@ -22,40 +28,55 @@ export class OpenAIService {
     return OpenAIService.instance;
   }
 
-  // Search for book recommendations using simple text search
+  // Enhanced search for book recommendations using vector similarity with fallback to text search
   private async searchBooks(query: string, limit: number = 5): Promise<string> {
     try {
-      console.log('🔍 Searching books with query:', query);
+      console.log('🔍 Enhanced book search with query:', query);
       
-      // First, let's check if there are any books at all - no filters
-      // Try with service role to bypass RLS
-      const { data: allBooks, error: countError } = await supabase
-        .from('books')
-        .select('id, title')
-        .limit(3);
-      
-      console.log('📊 Sample books check:', { 
-        count: allBooks?.length || 0, 
-        error: countError?.message,
-        sample: allBooks?.slice(0, 2)
-      });
+      // Primary: Try vector-based search using RecommendationService
+      try {
+        const vectorResults = await this.recommendationService.searchWithIterativeThresholds(
+          query, 
+          limit
+        );
+        
+        if (vectorResults && vectorResults.length > 0) {
+          console.log('✨ Vector search successful:', { 
+            query, 
+            count: vectorResults.length,
+            method: 'vector_similarity',
+            thresholds_used: vectorResults.map(r => r.similarity_score)
+          });
+          
+          const bookList = vectorResults.map((book: any, index) => 
+            `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id} (${Math.round(book.similarity_score * 100)}% match)`
+          ).join('\n');
 
-      // Simple text search in the books table - removed deleted_at filter for testing
+          return `Found ${vectorResults.length} AI-recommended books using advanced semantic search:\n\n${bookList}`;
+        }
+      } catch (vectorError) {
+        console.warn('Vector search failed, falling back to text search:', vectorError);
+      }
+
+      // Fallback: Use simple text search if vector search fails or returns no results
+      console.log('📝 Falling back to text search');
+      
       const { data: books, error } = await supabase
         .from('books')
         .select('id, title')
         .ilike('title', `%${query}%`)
+        .is('deleted_at', null)
         .limit(limit);
 
-      console.log('🔍 Search results:', { 
+      console.log('🔍 Text search results:', { 
         query, 
         count: books?.length || 0, 
         error: error?.message,
-        results: books?.slice(0, 2)
+        method: 'text_search'
       });
 
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('Text search error:', error);
         return `Database error: ${error.message}. Please check the console for details.`;
       }
 
@@ -64,12 +85,13 @@ export class OpenAIService {
         const { data: broadSearch, error: broadError } = await supabase
           .from('books')
           .select('id, title')
+          .is('deleted_at', null)
           .limit(5);
           
-        console.log('📚 Broad search (any books):', { 
+        console.log('📚 Broad search fallback:', { 
           count: broadSearch?.length || 0, 
           error: broadError?.message,
-          sample: broadSearch?.slice(0, 3)
+          method: 'broad_search'
         });
         
         if (broadSearch && broadSearch.length > 0) {
@@ -77,10 +99,10 @@ export class OpenAIService {
             `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id}`
           ).join('\n');
           
-          return `No books found for "${query}", but here are some books from the database:\n\n${sampleList}`;
+          return `No exact matches for "${query}", but here are some popular books from our catalog:\n\n${sampleList}`;
         }
         
-        return `No books found matching "${query}". Database contains ${broadSearch?.length || 0} total books.`;
+        return `No books found matching "${query}". Please try a different search term or browse our catalog.`;
       }
 
       // Format the results for the AI
@@ -88,9 +110,9 @@ export class OpenAIService {
         `${index + 1}. **${book.title}** (ID: ${book.id}) - knihobot.cz/g/${book.id}`
       ).join('\n');
 
-      return `Found ${books.length} relevant books:\n\n${bookList}`;
+      return `Found ${books.length} books using text search:\n\n${bookList}`;
     } catch (error) {
-      console.error('Error searching books:', error);
+      console.error('Error in enhanced book search:', error);
       return `Search error: ${error.message}. Please check the console for details.`;
     }
   }

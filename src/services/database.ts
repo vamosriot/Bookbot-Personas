@@ -465,6 +465,64 @@ export class DatabaseService {
       throw new Error(ERROR_MESSAGES.SUPABASE_CONNECTION_ERROR);
     }
   }
+
+  // Book Recommendation Statistics
+  async getBookRecommendationStats(): Promise<{
+    total_books: number;
+    books_with_embeddings: number;
+    embedding_coverage_percentage: number;
+    total_embeddings: number;
+    embedding_models: string[];
+    last_embedding_update?: string;
+  }> {
+    try {
+      console.log('📊 Fetching book recommendation statistics...');
+
+      // Get total books count
+      const { count: totalBooks, error: booksError } = await supabase
+        .from('books')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
+
+      if (booksError) {
+        throw booksError;
+      }
+
+      // Get books with embeddings count and models
+      const { data: embeddingData, error: embeddingError } = await supabase
+        .from('book_embeddings')
+        .select('book_id, model, created_at')
+        .order('created_at', { ascending: false });
+
+      if (embeddingError) {
+        throw embeddingError;
+      }
+
+      // Calculate statistics
+      const uniqueBookIds = new Set(embeddingData?.map(e => e.book_id) || []);
+      const booksWithEmbeddings = uniqueBookIds.size;
+      const totalEmbeddings = embeddingData?.length || 0;
+      const embeddingModels = [...new Set(embeddingData?.map(e => e.model) || [])];
+      const coveragePercentage = totalBooks ? (booksWithEmbeddings / totalBooks) * 100 : 0;
+      const lastUpdate = embeddingData?.[0]?.created_at;
+
+      const stats = {
+        total_books: totalBooks || 0,
+        books_with_embeddings: booksWithEmbeddings,
+        embedding_coverage_percentage: Math.round(coveragePercentage * 100) / 100,
+        total_embeddings: totalEmbeddings,
+        embedding_models: embeddingModels,
+        last_embedding_update: lastUpdate
+      };
+
+      console.log('📈 Book recommendation stats:', stats);
+      return stats;
+
+    } catch (error: any) {
+      console.error('Error fetching book recommendation stats:', error);
+      throw new Error(`Failed to get recommendation stats: ${error.message}`);
+    }
+  }
 }
 
 export const databaseService = DatabaseService.getInstance(); 

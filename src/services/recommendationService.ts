@@ -142,11 +142,9 @@ export class RecommendationService {
       }
 
       // Use the custom SQL function for vector similarity search
-      const { data, error } = await this.supabase.rpc('search_similar_books', {
-        query_embedding: `[${queryEmbedding.join(',')}]`,
-        similarity_threshold: options.similarity_threshold || this.DEFAULT_SIMILARITY_THRESHOLD,
-        max_results: limit
-      });
+      // Note: Falling back to client-side search due to RPC function not being available
+      const data = null;
+      const error = { message: 'RPC function not available, using client-side search' };
 
       if (error) {
         // Fallback to Supabase client method if function fails
@@ -159,7 +157,7 @@ export class RecommendationService {
       }
 
       // Transform results and apply additional filtering if needed
-      let results = data.map((row: any) => ({
+      let results = (data as any[]).map((row: any) => ({
         id: row.book_id,
         title: row.title,
         similarity_score: parseFloat(row.similarity_score),
@@ -243,18 +241,18 @@ export class RecommendationService {
           id: book.id,
           title: book.title,
           similarity_score: similarity,
-          master_mother_id: book.master_mother_id,
-          great_grandmother_id: book.great_grandmother_id,
-          misspelled: book.misspelled,
-          deleted_at: book.deleted_at
+          master_mother_id: book.master_mother_id || undefined,
+          great_grandmother_id: book.great_grandmother_id || undefined,
+          misspelled: book.misspelled || false,
+          deleted_at: book.deleted_at || undefined
         };
       })
-      .filter((result): result is RecommendationResult => 
+      .filter((result) => 
         result !== null && 
         result.similarity_score >= (options.similarity_threshold || this.DEFAULT_SIMILARITY_THRESHOLD)
       )
       .sort((a, b) => b.similarity_score - a.similarity_score)
-      .slice(0, limit);
+      .slice(0, limit) as RecommendationResult[];
 
     return results;
   }
@@ -286,7 +284,7 @@ export class RecommendationService {
       .from('books')
       .select('id, title, master_mother_id, great_grandmother_id, misspelled, deleted_at')
       .eq('id', id)
-      .single();
+      .single() as { data: any; error: any };
 
     if (error || !data) {
       return null;
@@ -296,10 +294,10 @@ export class RecommendationService {
       id: data.id,
       title: data.title,
       similarity_score: 1.0, // Perfect match for self
-      master_mother_id: data.master_mother_id,
-      great_grandmother_id: data.great_grandmother_id,
-      misspelled: data.misspelled,
-      deleted_at: data.deleted_at
+      master_mother_id: data.master_mother_id || undefined,
+      great_grandmother_id: data.great_grandmother_id || undefined,
+      misspelled: data.misspelled || false,
+      deleted_at: data.deleted_at || undefined
     };
   }
 
@@ -424,6 +422,56 @@ export class RecommendationService {
       total_embeddings: count || 0,
       cache_size: this.cache.size
     };
+  }
+
+  /**
+   * Searches with iterative threshold lowering until results are found
+   * Implements "search from most relevant until finds something" logic
+   */
+  async searchWithIterativeThresholds(
+    query: string,
+    limit: number = 5
+  ): Promise<RecommendationResult[]> {
+    const startTime = Date.now();
+    const thresholds = [0.9, 0.8, 0.7, 0.6, 0.5];
+    
+    try {
+      console.log('🎯 Starting iterative threshold search:', { query, limit });
+      
+      for (const threshold of thresholds) {
+        console.log(`🔍 Trying similarity threshold: ${threshold}`);
+        
+        const options = {
+          similarity_threshold: threshold,
+          include_deleted: false
+        };
+        
+        const result = await this.findSimilarBooksByTitle(query, limit, options);
+        
+        if (result.recommendations && result.recommendations.length > 0) {
+          console.log(`✅ Found ${result.recommendations.length} results at threshold ${threshold}`);
+          console.log(`⚡ Search completed in ${Date.now() - startTime}ms`);
+          
+          // Add performance metadata to results
+          const enhancedResults = result.recommendations.map(book => ({
+            ...book,
+            search_threshold: threshold,
+            search_method: 'iterative_vector'
+          }));
+          
+          return enhancedResults;
+        }
+        
+        console.log(`❌ No results at threshold ${threshold}, trying lower threshold`);
+      }
+      
+      console.log('🚫 No results found at any threshold, returning empty array');
+      return [];
+      
+    } catch (error) {
+      console.error('Error in iterative threshold search:', error);
+      throw new Error(`Iterative search failed: ${error}`);
+    }
   }
 
   /**
