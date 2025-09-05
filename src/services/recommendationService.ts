@@ -1034,7 +1034,8 @@ Generate 8-10 specific book titles that match this request:`;
         .in('id', bookIds);
 
       if (!options.include_deleted) {
-        bookQuery = bookQuery.is('deleted_at', null);
+        // Include only non-deleted books - handle both NULL and empty string as "not deleted"
+        bookQuery = bookQuery.or('deleted_at.is.null,deleted_at.eq.');
       }
 
       const { data: bookData, error: bookError } = await bookQuery;
