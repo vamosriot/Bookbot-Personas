@@ -998,9 +998,12 @@ Generate 8-10 specific book titles that match this request:`;
       console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
       
       // Use Supabase's vector similarity search function
-      // Use named parameters to match the function signature exactly
+      // Convert embedding array to PostgreSQL vector format
+      const vectorString = `[${embedding.join(',')}]`;
+      console.log(`🔢 Converting embedding to vector format: ${embedding.length} dimensions`);
+      
       const { data, error } = await supabase.rpc('search_similar_books', {
-        query_embedding: embedding,
+        query_embedding: vectorString,
         similarity_threshold: 0.5,
         max_results: limit * 2
       });
