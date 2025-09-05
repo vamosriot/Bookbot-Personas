@@ -1052,6 +1052,24 @@ Generate 8-10 specific book titles that match this request:`;
 
       if (!bookData || bookData.length === 0) {
         console.log('❌ No books found for embedding book_ids (possibly all deleted)');
+        
+        // Debug: Check if books exist without the deleted_at filter
+        const { data: allBooks, error: allBooksError } = await supabase
+          .from('books')
+          .select('id, title, deleted_at')
+          .in('id', bookIds.slice(0, 10)); // Check first 10 book IDs
+          
+        console.log('🔍 Debug - Books without deleted filter:', {
+          hasData: !!allBooks,
+          dataLength: allBooks?.length || 0,
+          sampleBooks: allBooks?.slice(0, 3),
+          error: allBooksError?.message || 'none'
+        });
+        
+        // Debug: Check a few specific book IDs
+        const sampleIds = bookIds.slice(0, 5);
+        console.log('🔍 Debug - Sample book_ids from embeddings:', sampleIds);
+        
         return [];
       }
 
