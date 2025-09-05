@@ -997,12 +997,11 @@ Generate 8-10 specific book titles that match this request:`;
     try {
       console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
       
-      // Use Supabase's vector similarity search
-      const rpcCall = supabase.rpc as any;
-      const { data, error } = await rpcCall('match_books_by_embedding', {
+      // Use Supabase's vector similarity search function
+      const { data, error } = await supabase.rpc('search_similar_books', {
         query_embedding: embedding,
-        match_threshold: 0.5, // Lower threshold for more results
-        match_count: limit * 2 // Get more results to filter
+        similarity_threshold: 0.5, // Lower threshold for more results
+        max_results: limit * 2 // Get more results to filter
       });
 
       if (error) {
@@ -1017,19 +1016,32 @@ Generate 8-10 specific book titles that match this request:`;
 
       // Transform results to RecommendationResult format
       const results = (data as any[]).map(item => ({
-        id: item.id || 0,
+        id: item.book_id || 0,
         title: item.title || '',
         master_mother_id: item.master_mother_id || undefined,
         great_grandmother_id: item.great_grandmother_id || undefined,
         misspelled: item.misspelled || false,
         deleted_at: item.deleted_at || undefined,
-        similarity_score: item.similarity || 0,
+        similarity_score: item.similarity_score || 0,
         search_method: 'vector_embedding',
         search_threshold: 0.5
       })) as RecommendationResult[];
 
-      console.log(`✅ Vector search found ${results.length} results`);
-      return results.slice(0, limit);
+      // Apply additional filtering if needed
+      let filteredResults = results;
+
+      // Filter out deleted books if requested
+      if (!options.include_deleted) {
+        filteredResults = filteredResults.filter(book => !book.deleted_at);
+      }
+
+      // Filter out excluded IDs if provided
+      if (options.exclude_ids && options.exclude_ids.length > 0) {
+        filteredResults = filteredResults.filter(book => !options.exclude_ids!.includes(book.id));
+      }
+
+      console.log(`✅ Vector search found ${filteredResults.length} results after filtering`);
+      return filteredResults.slice(0, limit);
       
     } catch (error) {
       console.error('❌ Error in vector search:', error);
