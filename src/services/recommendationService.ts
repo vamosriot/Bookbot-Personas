@@ -997,10 +997,11 @@ Generate 8-10 specific book titles that match this request:`;
     try {
       console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
       
-      // Use Supabase's vector similarity search function
-      // Convert embedding array to PostgreSQL vector format
-      const vectorString = `[${embedding.join(',')}]`;
+      // Try using the RPC function with proper vector casting
       console.log(`🔢 Converting embedding to vector format: ${embedding.length} dimensions`);
+      
+      // Try different vector formats to see which one works
+      const vectorString = `[${embedding.join(',')}]`;
       
       const { data, error } = await supabase.rpc('search_similar_books', {
         query_embedding: vectorString,
@@ -1010,6 +1011,7 @@ Generate 8-10 specific book titles that match this request:`;
 
       if (error) {
         console.warn('❌ Vector search error:', error.message);
+        console.log('🔄 Falling back to text search due to vector search failure');
         return [];
       }
 
@@ -1034,11 +1036,6 @@ Generate 8-10 specific book titles that match this request:`;
       // Apply additional filtering if needed
       let filteredResults = results;
 
-      // Filter out deleted books if requested
-      if (!options.include_deleted) {
-        filteredResults = filteredResults.filter(book => !book.deleted_at);
-      }
-
       // Filter out excluded IDs if provided
       if (options.exclude_ids && options.exclude_ids.length > 0) {
         filteredResults = filteredResults.filter(book => !options.exclude_ids!.includes(book.id));
@@ -1049,6 +1046,7 @@ Generate 8-10 specific book titles that match this request:`;
       
     } catch (error) {
       console.error('❌ Error in vector search:', error);
+      console.log('🔄 Falling back to text search due to vector search failure');
       return [];
     }
   }
