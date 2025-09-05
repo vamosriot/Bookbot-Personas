@@ -42,9 +42,9 @@ export const supabase = hasSupabaseCredentials ? createClient<Database>(
     },
     global: {
       headers: {
-        'X-Client-Info': 'bookbot-personas@1.0.0',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        'X-Client-Info': 'bookbot-personas@1.0.0'
+        // Remove the hardcoded Authorization header - Supabase will handle this automatically
+        // The apikey is automatically added by Supabase client
       }
     },
     db: {
