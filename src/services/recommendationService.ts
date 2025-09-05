@@ -998,10 +998,11 @@ Generate 8-10 specific book titles that match this request:`;
       console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
       
       // Use Supabase's vector similarity search function
+      // Use named parameters to match the function signature exactly
       const { data, error } = await supabase.rpc('search_similar_books', {
         query_embedding: embedding,
-        similarity_threshold: 0.5, // Lower threshold for more results
-        max_results: limit * 2 // Get more results to filter
+        similarity_threshold: 0.5,
+        max_results: limit * 2
       });
 
       if (error) {
