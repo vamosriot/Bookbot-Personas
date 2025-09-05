@@ -6,7 +6,8 @@
  * This file should be deployed to: https://bookbot-openai-worker.vojtech-gryc.workers.dev/
  */
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_EMBEDDINGS_URL = 'https://api.openai.com/v1/embeddings';
 
 // CORS headers for frontend requests
 const corsHeaders = {
@@ -53,7 +54,12 @@ export default {
       // Parse the request body
       const requestBody = await request.json();
       
-      // Validate required fields
+      // Handle embedding requests
+      if (requestBody.action === 'embedding') {
+        return await handleEmbeddingRequest(requestBody, env);
+      }
+      
+      // Validate required fields for chat completions
       if (!requestBody.messages || !Array.isArray(requestBody.messages)) {
         return new Response(JSON.stringify({
           error: 'Invalid request: messages array is required',
@@ -100,7 +106,7 @@ export default {
       });
 
       // Make request to OpenAI
-      const openAiResponse = await fetch(OPENAI_API_URL, {
+      const openAiResponse = await fetch(OPENAI_CHAT_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
@@ -179,3 +185,100 @@ export default {
     }
   },
 };
+
+/**
+ * Handle embedding generation requests
+ */
+async function handleEmbeddingRequest(requestBody, env) {
+  try {
+    // Validate embedding request
+    if (!requestBody.text || typeof requestBody.text !== 'string') {
+      return new Response(JSON.stringify({
+        error: 'Invalid request: text field is required',
+        code: 'INVALID_EMBEDDING_REQUEST'
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    }
+
+    // Prepare embedding request
+    const embeddingRequest = {
+      model: requestBody.model || 'text-embedding-3-small',
+      input: requestBody.text,
+      encoding_format: 'float'
+    };
+
+    console.log('🔮 Generating embedding:', {
+      model: embeddingRequest.model,
+      textLength: requestBody.text.length
+    });
+
+    // Make request to OpenAI Embeddings API
+    const openAiResponse = await fetch(OPENAI_EMBEDDINGS_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(embeddingRequest),
+    });
+
+    // Handle OpenAI API errors
+    if (!openAiResponse.ok) {
+      const errorData = await openAiResponse.json().catch(() => ({}));
+      console.error('❌ OpenAI Embeddings API error:', {
+        status: openAiResponse.status,
+        statusText: openAiResponse.statusText,
+        error: errorData
+      });
+
+      return new Response(JSON.stringify({
+        error: errorData.error?.message || 'OpenAI Embeddings API request failed',
+        code: 'OPENAI_EMBEDDINGS_ERROR',
+        status: openAiResponse.status
+      }), {
+        status: openAiResponse.status,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    }
+
+    // Return the embedding response
+    const responseData = await openAiResponse.json();
+    
+    console.log('✅ Embedding generated:', {
+      model: responseData.model,
+      usage: responseData.usage,
+      dimensions: responseData.data?.[0]?.embedding?.length
+    });
+
+    return new Response(JSON.stringify(responseData), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    });
+
+  } catch (error) {
+    console.error('💥 Embedding generation error:', error);
+    
+    return new Response(JSON.stringify({
+      error: 'Embedding generation failed',
+      code: 'EMBEDDING_ERROR',
+      message: error.message
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    });
+  }
+}

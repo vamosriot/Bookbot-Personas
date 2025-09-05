@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase Books Debug</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Supabase Books Database Debug</h1>
+    <button onclick="testDatabase()">Test Database Connection</button>
+    <div id="results"></div>
+
+    <script>
+        // You'll need to replace these with your actual values
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL_HERE';
+        const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY_HERE';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        async function testDatabase() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Testing...</p>';
+            
+            try {
+                // Test 1: Count all books
+                console.log('🔍 Testing books table...');
+                const { data: books, error } = await supabase
+                    .from('books')
+                    .select('id, title')
+                    .limit(5);
+                
+                if (error) {
+                    resultsDiv.innerHTML = `<h3>❌ Error:</h3><pre>${JSON.stringify(error, null, 2)}</pre>`;
+                    return;
+                }
+                
+                resultsDiv.innerHTML = `
+                    <h3>✅ Found ${books?.length || 0} books:</h3>
+                    <pre>${JSON.stringify(books, null, 2)}</pre>
+                `;
+                
+                // Test 2: Search for Harry Potter
+                if (books && books.length > 0) {
+                    const { data: harryBooks, error: harryError } = await supabase
+                        .from('books')
+                        .select('id, title')
+                        .or('title.ilike.%Harry%,title.ilike.%Potter%')
+                        .limit(10);
+                    
+                    resultsDiv.innerHTML += `
+                        <h3>🔍 Harry Potter search (${harryBooks?.length || 0} results):</h3>
+                        <pre>${JSON.stringify(harryBooks, null, 2)}</pre>
+                    `;
+                    
+                    // Generate knihobot.cz links
+                    if (harryBooks && harryBooks.length > 0) {
+                        const links = harryBooks.map(book => 
+                            `knihobot.cz/g/${book.id} - "${book.title}"`
+                        ).join('\n');
+                        
+                        resultsDiv.innerHTML += `
+                            <h3>📚 Knihobot.cz links:</h3>
+                            <pre>${links}</pre>
+                        `;
+                    }
+                }
+                
+            } catch (err) {
+                resultsDiv.innerHTML = `<h3>❌ Exception:</h3><pre>${err.message}</pre>`;
+            }
+        }
+        
+        // Auto-test if URL and key are provided
+        if (SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE') {
+            testDatabase();
+        }
+    </script>
+</body>
+</html>

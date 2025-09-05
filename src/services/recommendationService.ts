@@ -840,40 +840,66 @@ Generate 8-10 specific book titles that match this request:`;
   }
 
   /**
-   * Find best matches in database for AI-generated suggestions
+   * Find best matches in database for AI-generated suggestions using embeddings
    */
   private async findBestMatchesForSuggestions(
     suggestions: string[],
     limit: number,
     options: SearchOptions = {}
   ): Promise<RecommendationResult[]> {
-    console.log('🔍 Searching database for AI suggestions:', suggestions);
+    console.log('🔍 Searching database for AI suggestions using embeddings:', suggestions);
     
     const allMatches: RecommendationResult[] = [];
     
     for (const suggestion of suggestions) {
       try {
-        // Search for each suggestion in the database
-        const matches = await this.searchDatabaseForTitle(suggestion, options);
+        console.log(`🎯 Processing AI suggestion: "${suggestion}"`);
         
-        // Add matches with relevance score based on suggestion order
-        matches.forEach((match, index) => {
-          const suggestionIndex = suggestions.indexOf(suggestion);
-          const relevanceBonus = (suggestions.length - suggestionIndex) / suggestions.length;
+        // Generate embedding for this AI suggestion
+        const embedding = await this.generateEmbeddingForSuggestion(suggestion);
+        
+        if (embedding) {
+          // Use vector similarity search to find matches
+          const matches = await this.searchByEmbedding(embedding, limit, options);
           
-          allMatches.push({
-            ...match,
-            similarity_score: Math.min(match.similarity_score + relevanceBonus * 0.3, 1.0),
-            ai_suggestion: suggestion // Track which AI suggestion led to this match
-          } as RecommendationResult & { ai_suggestion: string });
-        });
+          // Add matches with relevance score based on suggestion order
+          matches.forEach((match, index) => {
+            const suggestionIndex = suggestions.indexOf(suggestion);
+            const relevanceBonus = (suggestions.length - suggestionIndex) / suggestions.length;
+            
+            allMatches.push({
+              ...match,
+              similarity_score: Math.min(match.similarity_score + relevanceBonus * 0.1, 1.0),
+              ai_suggestion: suggestion, // Track which AI suggestion led to this match
+              search_method: 'embedding_vector'
+            } as RecommendationResult & { ai_suggestion: string });
+          });
+          
+          console.log(`✅ Found ${matches.length} embedding matches for "${suggestion}"`);
+        } else {
+          // Fallback to text search if embedding generation fails
+          console.log(`⚠️ Embedding failed for "${suggestion}", falling back to text search`);
+          const matches = await this.searchDatabaseForTitle(suggestion, options);
+          
+          matches.forEach((match, index) => {
+            const suggestionIndex = suggestions.indexOf(suggestion);
+            const relevanceBonus = (suggestions.length - suggestionIndex) / suggestions.length;
+            
+            allMatches.push({
+              ...match,
+              similarity_score: Math.min(match.similarity_score + relevanceBonus * 0.2, 1.0),
+              ai_suggestion: suggestion,
+              search_method: 'text_fallback'
+            } as RecommendationResult & { ai_suggestion: string });
+          });
+        }
         
       } catch (error) {
         console.warn(`Failed to search for suggestion "${suggestion}":`, error);
       }
     }
 
-    // Remove duplicates (same book ID)
+    // Remove duplicates (same book ID), keeping the highest scoring match
     const uniqueMatches = new Map<number, RecommendationResult>();
     
     allMatches.forEach(match => {
@@ -884,9 +910,106 @@ Generate 8-10 specific book titles that match this request:`;
     });
 
     // Sort by similarity score and return top results
-    return Array.from(uniqueMatches.values())
+    const results = Array.from(uniqueMatches.values())
       .sort((a, b) => b.similarity_score - a.similarity_score)
       .slice(0, limit);
+      
+    console.log(`🎯 Final results: ${results.length} unique books found`);
+    return results;
+  }
+
+  /**
+   * Generate embedding for an AI suggestion using the Cloudflare Worker
+   */
+  private async generateEmbeddingForSuggestion(suggestion: string): Promise<number[] | null> {
+    try {
+      console.log(`🔮 Generating embedding for: "${suggestion}"`);
+      
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(CLOUDFLARE_WORKER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          action: 'embedding',
+          text: suggestion,
+          model: 'text-embedding-3-small'
+        })
+      });
+
+      if (!response.ok) {
+        console.warn(`❌ Embedding generation failed: ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const embedding = data.data?.[0]?.embedding;
+      
+      if (embedding && Array.isArray(embedding)) {
+        console.log(`✅ Generated embedding with ${embedding.length} dimensions`);
+        return embedding;
+      } else {
+        console.warn('❌ Invalid embedding response format');
+        return null;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error generating embedding:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Search database using vector embedding similarity
+   */
+  private async searchByEmbedding(
+    embedding: number[],
+    limit: number,
+    options: SearchOptions = {}
+  ): Promise<RecommendationResult[]> {
+    try {
+      console.log(`🔍 Searching by embedding with ${embedding.length} dimensions`);
+      
+      // Use Supabase's vector similarity search
+      const rpcCall = supabase.rpc as any;
+      const { data, error } = await rpcCall('match_books_by_embedding', {
+        query_embedding: embedding,
+        match_threshold: 0.5, // Lower threshold for more results
+        match_count: limit * 2 // Get more results to filter
+      });
+
+      if (error) {
+        console.warn('❌ Vector search error:', error.message);
+        return [];
+      }
+
+      if (!data || (data as any[]).length === 0) {
+        console.log('❌ No vector search results found');
+        return [];
+      }
+
+      // Transform results to RecommendationResult format
+      const results = (data as any[]).map(item => ({
+        id: item.id || 0,
+        title: item.title || '',
+        master_mother_id: item.master_mother_id || undefined,
+        great_grandmother_id: item.great_grandmother_id || undefined,
+        misspelled: item.misspelled || false,
+        deleted_at: item.deleted_at || undefined,
+        similarity_score: item.similarity || 0,
+        search_method: 'vector_embedding',
+        search_threshold: 0.5
+      })) as RecommendationResult[];
+
+      console.log(`✅ Vector search found ${results.length} results`);
+      return results.slice(0, limit);
+      
+    } catch (error) {
+      console.error('❌ Error in vector search:', error);
+      return [];
+    }
   }
 
   /**
@@ -952,10 +1075,10 @@ Generate 8-10 specific book titles that match this request:`;
 
           const { data, error } = await supabaseQuery;
 
-          if (!error && data && data.length > 0) {
-            console.log(`✅ Found ${data.length} results with strategy:`, strategy.description, 'Query:', strategy.value);
-            console.log('Sample results:', data.slice(0, 3).map(book => book.title));
-            allResults = allResults.concat(data);
+          if (!error && data && (data as any[]).length > 0) {
+            console.log(`✅ Found ${(data as any[]).length} results with strategy:`, strategy.description, 'Query:', strategy.value);
+            console.log('Sample results:', (data as any[]).slice(0, 3).map(book => book.title));
+            allResults = allResults.concat(data as any[]);
           } else if (error) {
             console.warn(`❌ Strategy ${strategy.description} failed:`, error.message);
           }
@@ -976,7 +1099,7 @@ Generate 8-10 specific book titles that match this request:`;
             .limit(10);
             
           if (!sampleError && sampleBooks) {
-            console.log('📚 Sample books in database:', sampleBooks.map(book => book.title));
+            console.log('📚 Sample books in database:', (sampleBooks as any[]).map(book => book.title));
           } else {
             console.log('❌ Could not fetch sample books:', sampleError?.message);
           }
