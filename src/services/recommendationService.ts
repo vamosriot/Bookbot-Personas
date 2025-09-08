@@ -1137,8 +1137,8 @@ Generate 8-10 specific book titles that match this request:`;
           allSimilarities.push({ title: book.title, similarity });
         }
         
-        // Use configurable threshold from options or default (much lower for Czech books)
-        const threshold = options.similarity_threshold || 0.2; // Lower default for Czech books
+        // Use configurable threshold from options or default (very low for Czech books)
+        const threshold = options.similarity_threshold || 0.001; // Very low default for Czech books
         
         // Only include results above threshold
         if (similarity >= threshold) {
@@ -1159,7 +1159,7 @@ Generate 8-10 specific book titles that match this request:`;
       // Sort by similarity score (highest first)
       results.sort((a, b) => b.similarity_score - a.similarity_score);
 
-      const threshold = options.similarity_threshold || 0.2; // Lower default for Czech books
+      const threshold = options.similarity_threshold || 0.001; // Very low default for Czech books
       console.log(`✅ Vector search found ${results.length} results with similarity >= ${threshold}`);
       
       // Debug: Show top similarity scores to help with threshold tuning
