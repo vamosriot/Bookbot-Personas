@@ -1114,9 +1114,26 @@ Generate 8-10 specific book titles that match this request:`;
       const allSimilarities: { title: string; similarity: number }[] = [];
       
       for (const embeddingItem of (embeddingData as any[])) {
-        if (!embeddingItem.embedding || !Array.isArray(embeddingItem.embedding)) {
+        let parsedEmbedding = embeddingItem.embedding;
+        
+        // Handle string embeddings (parse JSON strings back to arrays)
+        if (typeof embeddingItem.embedding === 'string') {
+          try {
+            parsedEmbedding = JSON.parse(embeddingItem.embedding);
+            if (allSimilarities.length < 3) {
+              console.log(`🔧 Parsed string embedding for book_id ${embeddingItem.book_id}: length ${parsedEmbedding.length}`);
+            }
+          } catch (error) {
+            if (allSimilarities.length < 3) {
+              console.log(`❌ Failed to parse embedding for book_id ${embeddingItem.book_id}:`, error);
+            }
+            continue;
+          }
+        }
+        
+        if (!parsedEmbedding || !Array.isArray(parsedEmbedding)) {
           if (allSimilarities.length < 3) {
-            console.log(`⚠️ Invalid embedding format for book_id ${embeddingItem.book_id}:`, typeof embeddingItem.embedding);
+            console.log(`⚠️ Invalid embedding format for book_id ${embeddingItem.book_id}:`, typeof parsedEmbedding);
           }
           continue;
         }
@@ -1129,7 +1146,7 @@ Generate 8-10 specific book titles that match this request:`;
 
         // Debug: Log embedding info for first few items
         if (allSimilarities.length < 3) {
-          console.log(`🔍 Processing book "${book.title}": embedding length ${embeddingItem.embedding.length}, query length ${embedding.length}`);
+          console.log(`🔍 Processing book "${book.title}": embedding length ${parsedEmbedding.length}, query length ${embedding.length}`);
         }
 
         // Apply exclude_ids filter
@@ -1138,7 +1155,7 @@ Generate 8-10 specific book titles that match this request:`;
         }
 
         // Calculate cosine similarity
-        const similarity = this.calculateCosineSimilarity(embedding, embeddingItem.embedding);
+        const similarity = this.calculateCosineSimilarity(embedding, parsedEmbedding);
         
         // Debug: Log first few similarity calculations
         if (allSimilarities.length < 5) {
