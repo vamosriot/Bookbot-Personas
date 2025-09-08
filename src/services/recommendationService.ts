@@ -1111,6 +1111,7 @@ Generate 8-10 specific book titles that match this request:`;
 
       // Calculate cosine similarity for each embedding
       const results: (RecommendationResult & { similarity_score: number })[] = [];
+      const allSimilarities: { title: string; similarity: number }[] = [];
       
       for (const embeddingItem of (embeddingData as any[])) {
         if (!embeddingItem.embedding || !Array.isArray(embeddingItem.embedding)) {
@@ -1131,8 +1132,16 @@ Generate 8-10 specific book titles that match this request:`;
         // Calculate cosine similarity
         const similarity = this.calculateCosineSimilarity(embedding, embeddingItem.embedding);
         
+        // Track all similarities for debugging
+        if (book) {
+          allSimilarities.push({ title: book.title, similarity });
+        }
+        
+        // Use configurable threshold from options or default (much lower for Czech books)
+        const threshold = options.similarity_threshold || 0.2; // Lower default for Czech books
+        
         // Only include results above threshold
-        if (similarity >= 0.5) {
+        if (similarity >= threshold) {
           results.push({
             id: book.id,
             title: book.title,
@@ -1142,7 +1151,7 @@ Generate 8-10 specific book titles that match this request:`;
             deleted_at: book.deleted_at || undefined,
             similarity_score: similarity,
             search_method: 'vector_embedding_client' as any,
-            search_threshold: 0.5
+            search_threshold: threshold
           } as any);
         }
       }
@@ -1150,7 +1159,18 @@ Generate 8-10 specific book titles that match this request:`;
       // Sort by similarity score (highest first)
       results.sort((a, b) => b.similarity_score - a.similarity_score);
 
-      console.log(`✅ Vector search found ${results.length} results with similarity >= 0.5`);
+      const threshold = options.similarity_threshold || 0.2; // Lower default for Czech books
+      console.log(`✅ Vector search found ${results.length} results with similarity >= ${threshold}`);
+      
+      // Debug: Show top similarity scores to help with threshold tuning
+      allSimilarities.sort((a, b) => b.similarity - a.similarity);
+      const topSimilarities = allSimilarities.slice(0, 5);
+      console.log(`🔍 Top 5 similarity scores:`, topSimilarities.map(s => `"${s.title}": ${s.similarity.toFixed(4)}`));
+      
+      if (results.length === 0 && topSimilarities.length > 0) {
+        console.log(`💡 Suggestion: Consider lowering threshold to ${(topSimilarities[0].similarity * 0.8).toFixed(3)} to get results`);
+      }
+      
       return results.slice(0, limit);
       
     } catch (error) {
