@@ -1115,6 +1115,9 @@ Generate 8-10 specific book titles that match this request:`;
       
       for (const embeddingItem of (embeddingData as any[])) {
         if (!embeddingItem.embedding || !Array.isArray(embeddingItem.embedding)) {
+          if (allSimilarities.length < 3) {
+            console.log(`⚠️ Invalid embedding format for book_id ${embeddingItem.book_id}:`, typeof embeddingItem.embedding);
+          }
           continue;
         }
 
@@ -1122,6 +1125,11 @@ Generate 8-10 specific book titles that match this request:`;
         const book = bookMap.get(embeddingItem.book_id);
         if (!book) {
           continue; // Book not found (possibly deleted)
+        }
+
+        // Debug: Log embedding info for first few items
+        if (allSimilarities.length < 3) {
+          console.log(`🔍 Processing book "${book.title}": embedding length ${embeddingItem.embedding.length}, query length ${embedding.length}`);
         }
 
         // Apply exclude_ids filter
@@ -1132,9 +1140,16 @@ Generate 8-10 specific book titles that match this request:`;
         // Calculate cosine similarity
         const similarity = this.calculateCosineSimilarity(embedding, embeddingItem.embedding);
         
-        // Track all similarities for debugging
-        if (book) {
+        // Debug: Log first few similarity calculations
+        if (allSimilarities.length < 5) {
+          console.log(`🔍 Debug similarity calc ${allSimilarities.length + 1}: "${book.title}" = ${similarity} (valid: ${!isNaN(similarity) && isFinite(similarity)})`);
+        }
+        
+        // Track all similarities for debugging (only if valid)
+        if (book && !isNaN(similarity) && isFinite(similarity)) {
           allSimilarities.push({ title: book.title, similarity });
+        } else if (book) {
+          console.log(`⚠️ Invalid similarity for "${book.title}": ${similarity}`);
         }
         
         // Use configurable threshold from options or default (very low for Czech books)
