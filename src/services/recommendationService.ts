@@ -38,7 +38,7 @@ export class RecommendationService {
   private readonly MAX_CACHE_SIZE = 1000; // Maximum cached queries
 
   // Search configuration
-  private readonly DEFAULT_SIMILARITY_THRESHOLD = 0.7;
+  private readonly DEFAULT_SIMILARITY_THRESHOLD = 0.001;
   private readonly DEFAULT_LIMIT = 10;
   private readonly MAX_LIMIT = 100;
 
@@ -692,7 +692,7 @@ export class RecommendationService {
     limit: number = 5
   ): Promise<RecommendationResult[]> {
     const startTime = Date.now();
-    const thresholds = [0.9, 0.8, 0.7, 0.6, 0.5];
+    const thresholds = [0.001, 0.01, 0.05, 0.1, 0.2]; // Start very low for Czech books
     const maxAIAttempts = 3; // Maximum number of times to regenerate AI suggestions
     
     try {
