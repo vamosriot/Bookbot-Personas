@@ -68,6 +68,88 @@ export const DB_TABLES = {
   BOOK_EMBEDDINGS: 'book_embeddings'
 } as const;
 
+// Vector Search Configuration
+export const VECTOR_SEARCH_CONFIG = {
+  // Embedding settings
+  EMBEDDING_MODEL: 'text-embedding-3-small',
+  EMBEDDING_DIMENSIONS: 1536,
+  
+  // Similarity thresholds
+  DEFAULT_SIMILARITY_THRESHOLD: parseFloat(process.env.DEFAULT_SIMILARITY_THRESHOLD || '0.7'),
+  HIGH_SIMILARITY_THRESHOLD: 0.85,
+  LOW_SIMILARITY_THRESHOLD: 0.5,
+  
+  // Search limits
+  DEFAULT_MAX_RESULTS: 10,
+  MAX_SEARCH_RESULTS: 50,
+  MIN_SEARCH_RESULTS: 1,
+  
+  // Performance settings
+  CLIENT_SIDE_SEARCH_LIMIT: 1000, // Max embeddings to process client-side
+  VECTOR_SEARCH_TIMEOUT: 10000, // 10 seconds
+  
+  // Batch processing
+  EMBEDDING_BATCH_SIZE: parseInt(process.env.EMBEDDING_BATCH_SIZE || '50'),
+  MAX_CONCURRENT_REQUESTS: 5,
+  
+  // Retry configuration
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 2000, // 2 seconds
+  EXPONENTIAL_BACKOFF: true,
+  
+  // Cache settings
+  CACHE_TTL_MS: parseInt(process.env.CACHE_TTL_MS || '300000'), // 5 minutes
+  ENABLE_RESULT_CACHING: true,
+  
+  // Rate limiting
+  OPENAI_RPM_LIMIT: parseInt(process.env.OPENAI_RPM_LIMIT || '3000'),
+  REQUEST_DELAY_MS: 1000, // 1 second between requests
+  
+  // Database function names
+  RPC_FUNCTIONS: {
+    SEARCH_SIMILAR_BOOKS: 'search_similar_books'
+  }
+} as const;
+
+// Vector Search Error Messages
+export const VECTOR_SEARCH_ERRORS = {
+  NO_EMBEDDINGS_FOUND: 'No embeddings found in database',
+  INVALID_EMBEDDING_DIMENSIONS: 'Invalid embedding dimensions',
+  EMBEDDING_GENERATION_FAILED: 'Failed to generate embedding',
+  VECTOR_SEARCH_TIMEOUT: 'Vector search timed out',
+  RPC_FUNCTION_NOT_FOUND: 'Vector search function not available',
+  DATABASE_CONNECTION_ERROR: 'Database connection error during vector search',
+  INSUFFICIENT_SIMILARITY: 'No books found with sufficient similarity',
+  INVALID_QUERY: 'Invalid search query provided',
+  RATE_LIMIT_EXCEEDED: 'Rate limit exceeded for embedding generation',
+  CACHE_ERROR: 'Error accessing search result cache'
+} as const;
+
+// Vector Search Success Messages
+export const VECTOR_SEARCH_SUCCESS = {
+  EMBEDDINGS_GENERATED: 'Embeddings generated successfully',
+  VECTOR_SEARCH_COMPLETED: 'Vector search completed successfully',
+  CACHE_HIT: 'Results retrieved from cache',
+  FALLBACK_SEARCH_SUCCESS: 'Client-side search completed successfully',
+  RPC_SEARCH_SUCCESS: 'Database vector search completed successfully'
+} as const;
+
+// Vector Search Performance Metrics
+export const VECTOR_SEARCH_METRICS = {
+  SEARCH_METHODS: {
+    RPC_FUNCTION: 'rpc_function',
+    CLIENT_SIDE: 'client_side',
+    CACHED: 'cached',
+    FALLBACK: 'fallback'
+  },
+  
+  PERFORMANCE_THRESHOLDS: {
+    FAST_SEARCH_MS: 500,
+    ACCEPTABLE_SEARCH_MS: 2000,
+    SLOW_SEARCH_MS: 5000
+  }
+} as const;
+
 // Real-time Subscriptions
 export const REALTIME_CHANNELS = {
   CONVERSATIONS: 'conversations',
@@ -103,7 +185,12 @@ export const ERROR_MESSAGES = {
   CSV_PARSE_ERROR: 'Failed to parse CSV file',
   CSV_INVALID_FORMAT: 'Invalid CSV format or missing required columns',
   IMPORT_BATCH_ERROR: 'Failed to import batch of records',
-  IMPORT_VALIDATION_ERROR: 'Validation error during import'
+  IMPORT_VALIDATION_ERROR: 'Validation error during import',
+  
+  // Vector Search Errors
+  VECTOR_SEARCH_FAILED: 'Vector search failed. Please try again.',
+  EMBEDDING_SERVICE_ERROR: 'Embedding service unavailable',
+  BOOK_RECOMMENDATIONS_ERROR: 'Failed to load book recommendations'
 } as const;
 
 // Success Messages

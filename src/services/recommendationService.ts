@@ -344,48 +344,36 @@ export class RecommendationService {
     options: SearchOptions = {}
   ): Promise<RecommendationResult[]> {
     try {
-      // Build the query
-      let query = supabase
-        .from('book_embeddings')
-        .select(`
-          book_id,
-          books!inner (
-            id,
-            title,
-            master_mother_id,
-            great_grandmother_id,
-            misspelled,
-            deleted_at
-          )
-        `)
-        .eq('model', 'text-embedding-3-small')
-        .limit(limit * 2); // Get more results to filter
+      console.log(`🔍 Attempting vector search with RPC function for ${queryEmbedding.length} dimensions`);
+      
+      // Convert embedding array to string format for PostgreSQL
+      const embeddingString = `[${queryEmbedding.join(',')}]`;
+      const similarityThreshold = options.similarity_threshold || this.DEFAULT_SIMILARITY_THRESHOLD;
+      
+      console.log(`📊 Using similarity threshold: ${similarityThreshold}, limit: ${limit}`);
 
-      // Add filtering conditions
-      if (!options.include_deleted) {
-        query = query.is('books.deleted_at', null);
-      }
-
-      if (options.exclude_ids && options.exclude_ids.length > 0) {
-        query = query.not('book_id', 'in', `(${options.exclude_ids.join(',')})`);
-      }
-
-      // Use the custom SQL function for vector similarity search
-      // Note: Falling back to client-side search due to RPC function not being available
-      const data = null;
-      const error = { message: 'RPC function not available, using client-side search' };
+      // Call the Supabase RPC function for vector similarity search
+      const rpcResult = await (supabase as any).rpc('search_similar_books', {
+        query_embedding: embeddingString,
+        similarity_threshold: similarityThreshold,
+        max_results: limit * 2 // Get more results to allow for filtering
+      });
+      const { data, error } = rpcResult;
 
       if (error) {
-        // Fallback to Supabase client method if function fails
-        console.warn('Vector search function failed, falling back to client method:', error);
+        console.warn('❌ RPC vector search function failed:', error.message);
+        console.log('🔄 Falling back to client-side vector search');
         return this.performClientSideVectorSearch(queryEmbedding, limit, options);
       }
 
-      if (!data) {
+      if (!data || data.length === 0) {
+        console.log('📭 RPC vector search returned no results');
         return [];
       }
 
-      // Transform results and apply additional filtering if needed
+      console.log(`✅ RPC vector search found ${data.length} initial results`);
+
+      // Transform results to match expected format
       let results = (data as any[]).map((row: any) => ({
         id: row.book_id,
         title: row.title,
@@ -396,15 +384,22 @@ export class RecommendationService {
         deleted_at: row.deleted_at
       }));
 
-      // Apply exclude_ids filter if specified (since the function doesn't handle this)
+      // Apply exclude_ids filter if specified (since the RPC function doesn't handle this)
       if (options.exclude_ids && options.exclude_ids.length > 0) {
+        const beforeCount = results.length;
         results = results.filter(book => !options.exclude_ids!.includes(book.id));
+        console.log(`🚫 Filtered out ${beforeCount - results.length} excluded books`);
       }
 
+      // Apply final limit
+      results = results.slice(0, limit);
+      
+      console.log(`📚 Returning ${results.length} vector search results`);
       return results;
 
     } catch (error) {
-      console.warn('Vector search failed, falling back to client method:', error);
+      console.warn('❌ Vector search failed with exception:', error);
+      console.log('🔄 Falling back to client-side vector search');
       return this.performClientSideVectorSearch(queryEmbedding, limit, options);
     }
   }
@@ -417,73 +412,109 @@ export class RecommendationService {
     limit: number,
     options: SearchOptions = {}
   ): Promise<RecommendationResult[]> {
-    // This is a simplified approach - in production, you'd want to use the RPC method above
-    // For now, we'll get all embeddings and compute similarity client-side (not recommended for large datasets)
-    
-    let query = supabase
-      .from('book_embeddings')
-      .select(`
-        book_id,
-        embedding,
-        books!inner (
-          id,
-          title,
-          master_mother_id,
-          great_grandmother_id,
-          misspelled,
-          deleted_at
+    try {
+      console.log(`🔄 Using client-side vector search fallback for ${queryEmbedding.length} dimensions`);
+      
+      // Validate embedding dimensions
+      if (queryEmbedding.length !== 1536) {
+        console.error(`❌ Invalid embedding dimensions: ${queryEmbedding.length}, expected 1536`);
+        return [];
+      }
+
+      let query = supabase
+        .from('book_embeddings')
+        .select(`
+          book_id,
+          embedding,
+          books!inner (
+            id,
+            title,
+            master_mother_id,
+            great_grandmother_id,
+            misspelled,
+            deleted_at
+          )
+        `)
+        .eq('model', 'text-embedding-3-small');
+
+      // Better filtering for deleted books - handle both NULL and empty string
+      if (!options.include_deleted) {
+        query = query.or('books.deleted_at.is.null,books.deleted_at.eq.');
+      }
+
+      if (options.exclude_ids && options.exclude_ids.length > 0) {
+        query = query.not('book_id', 'in', `(${options.exclude_ids.join(',')})`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('❌ Client-side vector search query failed:', error.message);
+        throw new Error(`Vector search failed: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        console.log('📭 No embeddings found for client-side search');
+        return [];
+      }
+
+      console.log(`📊 Processing ${data.length} embeddings for similarity calculation`);
+
+      const similarityThreshold = options.similarity_threshold || this.DEFAULT_SIMILARITY_THRESHOLD;
+      let validResults = 0;
+      let invalidEmbeddings = 0;
+
+      // Compute cosine similarity client-side
+      const results = data
+        .map((row: any) => {
+          const book = row.books;
+          const embedding = row.embedding;
+          
+          if (!embedding || !Array.isArray(embedding)) {
+            invalidEmbeddings++;
+            return null;
+          }
+
+          // Validate embedding dimensions
+          if (embedding.length !== 1536) {
+            console.warn(`⚠️ Invalid embedding dimensions for book ${book.id}: ${embedding.length}`);
+            invalidEmbeddings++;
+            return null;
+          }
+
+          const similarity = this.cosineSimilarity(queryEmbedding, embedding);
+          
+          if (similarity >= similarityThreshold) {
+            validResults++;
+          }
+          
+          return {
+            id: book.id,
+            title: book.title,
+            similarity_score: similarity,
+            master_mother_id: book.master_mother_id || undefined,
+            great_grandmother_id: book.great_grandmother_id || undefined,
+            misspelled: book.misspelled || false,
+            deleted_at: book.deleted_at || undefined
+          };
+        })
+        .filter((result) => 
+          result !== null && 
+          result.similarity_score >= similarityThreshold
         )
-      `)
-      .eq('model', 'text-embedding-3-small');
+        .sort((a, b) => b.similarity_score - a.similarity_score)
+        .slice(0, limit) as RecommendationResult[];
 
-    if (!options.include_deleted) {
-      query = query.is('books.deleted_at', null);
-    }
+      console.log(`✅ Client-side search: ${validResults} results above threshold ${similarityThreshold}`);
+      console.log(`⚠️ Skipped ${invalidEmbeddings} invalid embeddings`);
+      console.log(`📚 Returning ${results.length} client-side vector search results`);
 
-    if (options.exclude_ids && options.exclude_ids.length > 0) {
-      query = query.not('book_id', 'in', `(${options.exclude_ids.join(',')})`);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw new Error(`Vector search failed: ${error.message}`);
-    }
-
-    if (!data || data.length === 0) {
+      return results;
+      
+    } catch (error) {
+      console.error('❌ Client-side vector search failed:', error);
       return [];
     }
-
-    // Compute cosine similarity client-side
-    const results = data
-      .map((row: any) => {
-        const book = row.books;
-        const embedding = row.embedding;
-        
-        if (!embedding || !Array.isArray(embedding)) {
-          return null;
-        }
-
-        const similarity = this.cosineSimilarity(queryEmbedding, embedding);
-        
-        return {
-          id: book.id,
-          title: book.title,
-          similarity_score: similarity,
-          master_mother_id: book.master_mother_id || undefined,
-          great_grandmother_id: book.great_grandmother_id || undefined,
-          misspelled: book.misspelled || false,
-          deleted_at: book.deleted_at || undefined
-        };
-      })
-      .filter((result) => 
-        result !== null && 
-        result.similarity_score >= (options.similarity_threshold || this.DEFAULT_SIMILARITY_THRESHOLD)
-      )
-      .sort((a, b) => b.similarity_score - a.similarity_score)
-      .slice(0, limit) as RecommendationResult[];
-
-    return results;
   }
 
   /**
